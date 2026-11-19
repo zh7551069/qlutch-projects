@@ -1,0 +1,8 @@
+go 1.27.4
+
+use (
+	./packages/contracts
+	./services/airuntime
+	./services/api
+	./services/worker
+)

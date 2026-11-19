@@ -1,0 +1,73 @@
+# 本地依赖。口令与 .env.example 相同，只用于本机，不是生产凭证。
+# PostgreSQL 18.7 是落地时 Docker 官方稳定标签；19 已发布，官方镜像仍以 18 为 latest。
+# 对象存储使用最后一次公开分发的 MinIO 社区镜像，应用只走 S3 兼容接口。
+name: qlutch-local
+
+services:
+  postgres:
+    image: postgres:18.7
+    environment:
+      POSTGRES_USER: qlutch
+      POSTGRES_PASSWORD: qlutch-local-dev
+      POSTGRES_DB: qlutch
+    ports:
+      - "4713:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U qlutch -d qlutch"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:8.10.3
+    ports:
+      - "4714:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  object:
+    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: qlutch
+      MINIO_ROOT_PASSWORD: qlutch-local-dev
+    ports:
+      - "4715:9000"
+      - "4716:9001"
+    volumes:
+      - object-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:9000/minio/health/live"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+
+  object-init:
+    image: python:3.13-alpine
+    profiles: ["init"]
+    depends_on:
+      object:
+        condition: service_healthy
+    environment:
+      S3_ENDPOINT: http://object:9000
+      S3_REGION: us-east-1
+      S3_BUCKET: qlutch-local
+      S3_ACCESS_KEY: qlutch
+      S3_SECRET_KEY: qlutch-local-dev
+    volumes:
+      - ./create_bucket.py:/create_bucket.py:ro
+    entrypoint: ["python", "/create_bucket.py"]
+    restart: "no"
+
+volumes:
+  postgres-data:
+  redis-data:
+  object-data:

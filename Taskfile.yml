@@ -1,0 +1,69 @@
+version: "3"
+
+vars:
+  GOLANGCI_LINT_VERSION: v2.15.0
+  COMPOSE_FILE: infra/local/compose.yaml
+
+tasks:
+  bootstrap:
+    desc: 安装仓库依赖，并准备 golangci-lint
+    cmds:
+      - pnpm install
+      - go mod download
+      - task: golangci-install
+
+  up:
+    desc: 启动本地 PostgreSQL、Redis 和 S3 兼容存储
+    cmds:
+      - docker compose -f {{.COMPOSE_FILE}} up -d --wait
+      - docker compose -f {{.COMPOSE_FILE}} --profile init run --rm object-init
+
+  down:
+    desc: 停止本地依赖
+    cmds:
+      - docker compose -f {{.COMPOSE_FILE}} --profile init down --remove-orphans
+
+  gen:
+    desc: 由 OpenAPI 生成各端客户端
+    cmds:
+      - node tools/codegen/generate.mjs
+
+  lint:
+    desc: 运行平台、后管和三端结构检查
+    cmds:
+      - task: golangci-install
+      - bin/golangci-lint run ./services/api/... ./services/worker/... ./services/airuntime/... ./packages/contracts/...
+      - pnpm --filter @qlutch/admin lint
+      - node tools/codegen/check-shells.mjs
+
+  test:
+    desc: 运行平台测试、契约模型测试和后管单元测试
+    cmds:
+      - go test ./services/api/... ./services/worker/... ./services/airuntime/... ./packages/contracts/...
+      - node --test tools/codegen/model.test.mjs
+      - pnpm --filter @qlutch/admin test
+
+  api:
+    desc: 启动 API 进程
+    dotenv: [".env"]
+    cmds:
+      - go run ./services/api/cmd/api
+
+  worker:
+    desc: 启动作业进程
+    dotenv: [".env"]
+    cmds:
+      - go run ./services/worker/cmd/worker
+
+  admin:
+    desc: 启动后管开发服务器
+    dotenv: [".env"]
+    cmds:
+      - pnpm --filter @qlutch/admin dev
+
+  golangci-install:
+    internal: true
+    status:
+      - bin/golangci-lint version | grep -q "{{.GOLANGCI_LINT_VERSION}}"
+    cmds:
+      - curl -sSfL https://golangci-lint.run/install.sh | sh -s -- -b bin {{.GOLANGCI_LINT_VERSION}}

@@ -1,0 +1,16 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "Qlutch shell"
+    },
+    {
+      "name": "ability_desc",
+      "value": "Qlutch entry"
+    },
+    {
+      "name": "ability_label",
+      "value": "Qlutch"
+    }
+  ]
+}

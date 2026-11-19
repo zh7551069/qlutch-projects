@@ -1,0 +1,44 @@
+name: admin
+
+on:
+  pull_request:
+    paths:
+      - "apps/admin/**"
+      - "packages/contracts/src/**"
+      - "packages/contracts/gen/typescript/**"
+      - "packages/contracts/package.json"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - ".github/workflows/admin.yml"
+  push:
+    branches: [main]
+    paths:
+      - "apps/admin/**"
+      - "packages/contracts/src/**"
+      - "packages/contracts/gen/typescript/**"
+      - "packages/contracts/package.json"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - ".github/workflows/admin.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 12.21.0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26.13.1
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @qlutch/admin typecheck
+      - run: pnpm --filter @qlutch/admin test
+      - run: pnpm --filter @qlutch/admin lint

@@ -1,0 +1,33 @@
+name: clients
+
+on:
+  pull_request:
+    paths:
+      - "apps/ios/**"
+      - "apps/android/**"
+      - "apps/harmony/**"
+      - "packages/contracts/gen/**"
+      - "tools/codegen/**"
+      - ".github/workflows/clients.yml"
+  push:
+    branches: [main]
+    paths:
+      - "apps/ios/**"
+      - "apps/android/**"
+      - "apps/harmony/**"
+      - "packages/contracts/gen/**"
+      - "tools/codegen/**"
+      - ".github/workflows/clients.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  structure:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26.13.1
+      - run: node tools/codegen/check-shells.mjs

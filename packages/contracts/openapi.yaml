@@ -1,0 +1,59 @@
+openapi: 3.0.3
+info:
+  title: Qlutch API
+  version: 0.0.0
+  description: |
+    脚手架探针契约，只包含进程存活和依赖就绪。
+    平台路径、错误码和业务字段不在本文件定义。
+servers:
+  - url: http://127.0.0.1:4710
+    description: 本地 API
+paths:
+  /healthz:
+    get:
+      operationId: getHealth
+      summary: 进程存活
+      responses:
+        "200":
+          description: 进程正在运行
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+  /readyz:
+    get:
+      operationId: getReady
+      summary: 依赖就绪
+      responses:
+        "200":
+          description: 依赖可达
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReadyStatus"
+        "503":
+          description: 依赖不可达
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReadyStatus"
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status:
+          type: string
+    ReadyStatus:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status:
+          type: string
+        checks:
+          type: object
+          additionalProperties:
+            type: string
