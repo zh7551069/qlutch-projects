@@ -1,0 +1,17 @@
+[versions]
+agp = "9.5.1"
+kotlin = "2.4.21"
+compileSdk = "37"
+minSdk = "28"
+targetSdk = "37"
+composeBom = "2026.11.01"
+
+[libraries]
+compose-bom = { module = "androidx.compose:compose-bom", version.ref = "composeBom" }
+compose-ui = { module = "androidx.compose.ui:ui" }
+compose-material3 = { module = "androidx.compose.material3:material3" }
+activity-compose = { module = "androidx.activity:activity-compose" }
+
+[plugins]
+android-application = { id = "com.android.application", version.ref = "agp" }
+compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }

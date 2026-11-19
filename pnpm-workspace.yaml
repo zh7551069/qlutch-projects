@@ -1,0 +1,4 @@
+packages:
+  - apps/admin
+  - packages/contracts
+  - tools/codegen

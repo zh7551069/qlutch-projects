@@ -1,0 +1,171 @@
+:root {
+  color: #241c16;
+  background: #efe6d6;
+  font-family:
+    "Avenir Next", "Segoe UI", "PingFang SC", "Noto Sans SC", "Microsoft YaHei",
+    sans-serif;
+  line-height: 1.5;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+.env-banner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  min-height: 44px;
+  padding: 0 20px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.env-banner code {
+  font-family: "IBM Plex Mono", "Source Code Pro", ui-monospace, monospace;
+  font-weight: 600;
+}
+
+.env-banner[data-env="local"] {
+  background: #145c4a;
+  color: #f3fff8;
+}
+
+.env-banner[data-env="staging"] {
+  background: #8a4b08;
+  color: #fff6e8;
+}
+
+.env-banner[data-env="production"] {
+  background: #8f1239;
+  color: #fff5f6;
+}
+
+.env-banner:not([data-env="local"]):not([data-env="staging"]):not(
+  [data-env="production"]
+) {
+  background: #3f3a34;
+  color: #fffaf3;
+}
+
+.login {
+  display: grid;
+  place-items: center;
+  min-height: calc(100vh - 44px);
+  padding: 32px 16px;
+}
+
+.login form,
+.empty {
+  width: min(440px, 100%);
+  background: #fbf7ef;
+  border: 1px solid #ddcfb8;
+  padding: 28px;
+}
+
+.login h1,
+.empty h1 {
+  margin: 0 0 8px;
+  font-size: 32px;
+  letter-spacing: -0.03em;
+}
+
+.kicker {
+  margin: 0 0 8px;
+  color: #7a6244;
+  font-size: 13px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+label {
+  display: grid;
+  gap: 6px;
+  margin: 14px 0;
+  font-size: 14px;
+}
+
+input,
+select {
+  border: 1px solid #cbbda8;
+  background: #fffdf8;
+  padding: 10px 12px;
+}
+
+button,
+nav a {
+  border: 0;
+  background: #241c16;
+  color: #fbf7ef;
+  padding: 10px 14px;
+  text-decoration: none;
+}
+
+button {
+  cursor: pointer;
+}
+
+.app {
+  min-height: 100vh;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+}
+
+.frame {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  min-height: 0;
+}
+
+nav {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  padding: 20px;
+  background: #e7dcc8;
+}
+
+nav a[aria-current="page"] {
+  outline: 2px solid #145c4a;
+}
+
+.main {
+  padding: 28px;
+}
+
+.empty.denied {
+  border-style: dashed;
+}
+
+.probe,
+footer {
+  color: #6d6256;
+  font-size: 13px;
+}
+
+footer {
+  padding: 12px 20px 20px;
+}
+
+@media (max-width: 720px) {
+  .frame {
+    grid-template-columns: 1fr;
+  }
+
+  nav {
+    grid-auto-flow: column;
+    overflow-x: auto;
+  }
+}
