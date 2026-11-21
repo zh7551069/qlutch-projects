@@ -17,6 +17,7 @@ androidComponents {
 android {
     namespace = "dev.qlutch.app"
     compileSdk = libs.versions.compileSdk.get().toInt()
+    compileSdkMinor = libs.versions.compileSdkMinor.get().toInt()
 
     defaultConfig {
         applicationId = "dev.qlutch.app"
@@ -36,6 +37,10 @@ android {
         compose = true
     }
 
+    androidResources {
+        noCompress += "mp4"
+    }
+
     testOptions {
         unitTests.isIncludeAndroidResources = true
     }
@@ -49,6 +54,8 @@ android {
 dependencies {
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)
+    implementation(libs.compose.foundation)
     implementation(libs.compose.material3)
     implementation(libs.activity.compose)
+    testImplementation(libs.junit)
 }
