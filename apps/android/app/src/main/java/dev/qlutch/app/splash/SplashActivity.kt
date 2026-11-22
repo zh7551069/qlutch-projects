@@ -4,6 +4,7 @@ import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -20,6 +21,14 @@ class SplashActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         reduceMotion = ReduceMotion.isEnabled(this)
+        onBackPressedDispatcher.addCallback(
+            this,
+            object : OnBackPressedCallback(true) {
+                override fun handleOnBackPressed() {
+                    openNext()
+                }
+            },
+        )
         enableEdgeToEdge(
             statusBarStyle = SystemBarStyle.light(
                 scrim = android.graphics.Color.TRANSPARENT,
@@ -35,7 +44,7 @@ class SplashActivity : ComponentActivity() {
         }
         setContent {
             if (reduceMotion) {
-                StaticBrandSplash(onContinue = ::openNext)
+                StaticWelcomeStill(onContinue = ::openNext)
             } else {
                 ColdStartVideo(onFinished = ::openNext)
             }

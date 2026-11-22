@@ -30,20 +30,34 @@ class SplashBehaviorTest {
     }
 
     @Test
-    fun coverScalePreservesAspectAndFills() {
-        val (phoneX, phoneY) = coverScale(1080, 2400, 1080, 1920)
-        assertEquals(1.25f, phoneX, 0.001f)
-        assertEquals(1f, phoneY, 0.001f)
+    fun welcomeFrameIsOneThirdWideAndNineBySixteen() {
+        val (width, height) = SplashLayout.frameSize(1080f)
+        assertEquals(360f, width, 0f)
+        assertEquals(640f, height, 0.001f)
+        assertEquals(width * SplashLayout.HEIGHT_OVER_WIDTH, height, 0f)
 
-        val (sameX, sameY) = coverScale(1080, 1920, 1080, 1920)
-        assertEquals(1f, sameX, 0f)
-        assertEquals(1f, sameY, 0f)
+        val (narrow, narrowHeight) = SplashLayout.frameSize(393f)
+        assertEquals(131f, narrow, 0.001f)
+        assertEquals(131f * 16f / 9f, narrowHeight, 0.001f)
+        assertEquals(SplashLayout.WIDTH_FRACTION, 1f / 3f, 0f)
+    }
 
-        val (wideX, wideY) = coverScale(1920, 1080, 1080, 1920)
-        assertEquals(1f, wideX, 0.001f)
-        assertEquals((1920f / 1080f) / (1080f / 1920f), wideY, 0.001f)
+    @Test
+    fun containScaleFitsTheClipWithoutCroppingOrStretching() {
+        val (matchedX, matchedY) = containScale(360, 640, 1080, 1920)
+        assertEquals(1f, matchedX, 0.001f)
+        assertEquals(1f, matchedY, 0.001f)
 
-        assertEquals(1f to 1f, coverScale(0, 100, 1080, 1920))
+        val (wideX, wideY) = containScale(640, 640, 1080, 1920)
+        assertEquals((1080f / 1920f) / (640f / 640f), wideX, 0.001f)
+        assertEquals(1f, wideY, 0.001f)
+        assertTrue(wideX < 1f)
+
+        val (tallX, tallY) = containScale(360, 800, 1080, 1920)
+        assertEquals(1f, tallX, 0.001f)
+        assertTrue(tallY < 1f)
+
+        assertEquals(1f to 1f, containScale(0, 100, 1080, 1920))
     }
 
     @Test
@@ -80,15 +94,49 @@ class SplashBehaviorTest {
     }
 
     @Test
-    fun officialVideoBytesAreUnchanged() {
+    fun packedWelcomeClipBytesAreTheV4File() {
         val file = moduleFile("src/main/res/raw/splash.mp4")
         val bytes = file.readBytes()
-        assertEquals(266684, bytes.size)
+        assertEquals(849742, bytes.size)
         val digest = MessageDigest.getInstance("SHA-256").digest(bytes)
         val hex = digest.joinToString("") { "%02x".format(it) }
-        assertEquals("0307ab2061c71133b336761f4c45de1ecb27376ce140237d5f96e36df0347922", hex)
+        assertEquals("41f48c6521c33b0d04e64f3925751225796597fff713e2208ba39d59136c468a", hex)
         assertTrue(bytes.containsSequence("vide".encodeToByteArray()))
         assertFalse(bytes.containsSequence("soun".encodeToByteArray()))
+    }
+
+    @Test
+    fun previewSplashUsesTheV4BackgroundAndDoesNotDrawBrandCopy() {
+        val colors = moduleFile("src/main/res/values/colors.xml").readText()
+        assertTrue(colors.contains("<color name=\"splash_background\">#F2F5F7</color>"))
+        val themes = moduleFile("src/main/res/values/themes.xml").readText()
+        assertTrue(themes.contains("android:windowBackground\">@color/splash_background"))
+        assertTrue(themes.contains("android:windowSplashScreenBackground\" tools:targetApi=\"31\">@color/splash_background"))
+        assertFalse(themes.contains("@color/canvas"))
+
+        val splashDir = moduleFile("src/main/java/dev/qlutch/app/splash")
+        assertFalse(splashDir.list().orEmpty().any { it.contains("StaticBrand") })
+        val shown = listOf(
+            "ColdStartVideo.kt",
+            "StaticWelcomeStill.kt",
+            "SplashActivity.kt",
+            "SplashFrame.kt",
+            "SplashVideoView.kt",
+        ).joinToString("\n") { name ->
+            File(splashDir, name).readText()
+        }
+        assertFalse(shown.contains("splash_wordmark"))
+        assertFalse(shown.contains("splash_slogan"))
+        assertFalse(shown.contains("让记知识"))
+        assertFalse(shown.contains("coverScale"))
+        assertTrue(shown.contains("splash_background"))
+        assertTrue(shown.contains("StaticWelcomeStill"))
+        assertTrue(shown.contains("containScale"))
+        assertTrue(shown.contains("setVolume(0f, 0f)"))
+        assertTrue(shown.contains("OnBackPressedCallback"))
+        assertTrue(shown.contains("ContentScale.Fit"))
+        assertTrue(shown.contains("getFrameAtIndex(0)"))
+        assertTrue(moduleFile("build.gradle.kts").readText().contains("noCompress += \"mp4\""))
     }
 
     private fun ByteArray.containsSequence(needle: ByteArray): Boolean {

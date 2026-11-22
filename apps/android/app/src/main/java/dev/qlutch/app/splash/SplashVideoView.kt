@@ -12,8 +12,9 @@ import android.view.View
 import dev.qlutch.app.R
 
 /**
- * Plays the silent cold-start video, center-cropped to the view.
- * Completion and decode failure call [onFinished]. Taps are handled by the overlay.
+ * Plays the silent welcome clip fitted inside this view.
+ * The view is the centered 9:16 frame, and [containScale] keeps the whole picture
+ * visible. Completion and decode failure call [onFinished]. Taps are handled by the overlay.
  */
 internal class SplashVideoView(context: Context) : TextureView(context), TextureView.SurfaceTextureListener {
     var onFinished: (() -> Unit)? = null
@@ -36,12 +37,12 @@ internal class SplashVideoView(context: Context) : TextureView(context), Texture
             if (released || finished) return@setOnPreparedListener
             prepared = true
             mp.setVolume(0f, 0f)
-            applyCover()
+            applyContain()
             if (surface != null && inForeground) {
                 mp.start()
             }
         }
-        player.setOnVideoSizeChangedListener { _, _, _ -> applyCover() }
+        player.setOnVideoSizeChangedListener { _, _, _ -> applyContain() }
         player.setOnCompletionListener { dispatchFinished() }
         player.setOnErrorListener { _, _, _ ->
             dispatchFinished()
@@ -124,7 +125,7 @@ internal class SplashVideoView(context: Context) : TextureView(context), Texture
             dispatchFinished()
             return
         }
-        applyCover()
+        applyContain()
         if (prepared && !finished && inForeground) {
             try {
                 player.setVolume(0f, 0f)
@@ -136,7 +137,7 @@ internal class SplashVideoView(context: Context) : TextureView(context), Texture
     }
 
     override fun onSurfaceTextureSizeChanged(surfaceTexture: SurfaceTexture, width: Int, height: Int) {
-        applyCover()
+        applyContain()
     }
 
     override fun onSurfaceTextureDestroyed(surfaceTexture: SurfaceTexture): Boolean {
@@ -153,10 +154,10 @@ internal class SplashVideoView(context: Context) : TextureView(context), Texture
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
-        applyCover()
+        applyContain()
     }
 
-    private fun applyCover() {
+    private fun applyContain() {
         if (released) return
         val videoWidth: Int
         val videoHeight: Int
@@ -166,7 +167,7 @@ internal class SplashVideoView(context: Context) : TextureView(context), Texture
         } catch (_: IllegalStateException) {
             return
         }
-        val (scaleX, scaleY) = coverScale(width, height, videoWidth, videoHeight)
+        val (scaleX, scaleY) = containScale(width, height, videoWidth, videoHeight)
         val matrix = Matrix()
         matrix.setScale(scaleX, scaleY, width / 2f, height / 2f)
         setTransform(matrix)
