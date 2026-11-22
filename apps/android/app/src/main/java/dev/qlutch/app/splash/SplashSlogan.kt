@@ -113,7 +113,10 @@ internal fun layoutSplashSlogan(view: TextView, frameWidth: Int, frameHeight: In
 }
 
 /** Reduced-motion host. Fills the 9:16 frame and draws only the slogan line. */
-internal class SplashSloganHost(context: Context) : FrameLayout(context) {
+internal class SplashSloganHost(
+    context: Context,
+    private val onLaidOut: (width: Int, height: Int) -> Unit = { _, _ -> },
+) : FrameLayout(context) {
     private val slogan = createSloganView(context)
 
     init {
@@ -124,6 +127,7 @@ internal class SplashSloganHost(context: Context) : FrameLayout(context) {
 
     override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
         layoutSplashSlogan(slogan, right - left, bottom - top)
+        onLaidOut(slogan.width, slogan.height)
     }
 
     override fun onInterceptTouchEvent(event: MotionEvent): Boolean = false

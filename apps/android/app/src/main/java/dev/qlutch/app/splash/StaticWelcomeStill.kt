@@ -8,6 +8,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -25,6 +26,7 @@ import kotlinx.coroutines.delay
 internal fun StaticWelcomeStill(onContinue: () -> Unit) {
     val background = colorResource(R.color.splash_background)
     val continueLabel = stringResource(R.string.splash_continue)
+    val launchHandoff = LocalSplashLaunchHandoff.current
     val handedOff = remember { mutableStateOf(false) }
     fun go() {
         if (handedOff.value) return
@@ -39,13 +41,19 @@ internal fun StaticWelcomeStill(onContinue: () -> Unit) {
         Image(
             painter = painterResource(R.drawable.splash_first_frame),
             contentDescription = null,
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier.fillMaxSize().onSizeChanged { size ->
+                launchHandoff.onStillLaidOut(size.width, size.height)
+            },
             contentScale = ContentScale.Fit,
         )
         G4Wordmark()
         AndroidView(
             modifier = Modifier.fillMaxSize(),
-            factory = { context -> SplashSloganHost(context) },
+            factory = { context ->
+                SplashSloganHost(context) { width, height ->
+                    launchHandoff.onSloganLaidOut(width, height)
+                }
+            },
         )
     }
 }

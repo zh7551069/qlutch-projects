@@ -17,6 +17,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -293,6 +294,7 @@ internal fun SplashStage(
 internal fun G4Wordmark() {
     val description = stringResource(R.string.splash_wordmark) +
         stringResource(R.string.splash_wordmark_period)
+    val launchHandoff = LocalSplashLaunchHandoff.current
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val mark = SplashLayout.wordmarkInFrame(maxWidth.value, maxHeight.value)
         Image(
@@ -301,7 +303,10 @@ internal fun G4Wordmark() {
             modifier = Modifier
                 .absoluteOffset(x = mark.left.dp, y = mark.top.dp)
                 .width(mark.width.dp)
-                .height(mark.height.dp),
+                .height(mark.height.dp)
+                .onSizeChanged { size ->
+                    launchHandoff.onWordmarkLaidOut(size.width, size.height)
+                },
             contentScale = ContentScale.Fit,
         )
     }

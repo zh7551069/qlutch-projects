@@ -265,6 +265,7 @@ internal class SplashVideoView(context: Context) : TextureView(context), Texture
  * the player position, so they stay put when the squirrel jumps. Neither is part of the mp4.
  */
 internal class SplashPlaybackView(context: Context) : FrameLayout(context) {
+    var launchHandoff: SplashLaunchHandoff? = null
     val video: SplashVideoView = SplashVideoView(context)
     private val posterCover = SplashPosterCover()
     private val poster: ImageView = PassThroughImageView(context).apply {
@@ -355,6 +356,10 @@ internal class SplashPlaybackView(context: Context) : FrameLayout(context) {
         )
         wordmark.layout(markLeft, markTop, markLeft + markWidth, markTop + markHeight)
         layoutSplashSlogan(slogan, frameWidth, frameHeight)
+        val handoff = launchHandoff ?: return
+        if (poster.drawable != null) handoff.onStillLaidOut(frameWidth, frameHeight)
+        handoff.onWordmarkLaidOut(markWidth, markHeight)
+        handoff.onSloganLaidOut(slogan.width, slogan.height)
     }
 }
 

@@ -2,12 +2,21 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
     <style name="Theme.Qlutch" parent="android:Theme.Material.Light.NoActionBar" />
 
+    <!--
+      What the user sees on the icon tap, before this activity draws.
+      The Android 12+ icon is a circle, so it is a square crop of the first frame
+      with the squirrel inside the adaptive safe zone, not the raw 9:16 frame.
+      The icon background matches the splash color, which makes the system enlarge
+      the icon and skip the contrasting disc. icon_preferred keeps Android 13+ from
+      dropping that icon and showing a plain color. Pre-12 uses the window background.
+    -->
     <style name="Theme.Qlutch.Splash" parent="Theme.Qlutch">
-        <item name="android:windowBackground">@color/splash_background</item>
+        <item name="android:windowBackground">@drawable/splash_window_background</item>
         <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
         <item name="android:windowSplashScreenBackground" tools:targetApi="31">@color/splash_background</item>
-        <item name="android:windowSplashScreenAnimatedIcon" tools:targetApi="31">@drawable/splash_empty_icon</item>
+        <item name="android:windowSplashScreenAnimatedIcon" tools:targetApi="31">@drawable/splash_system_icon</item>
         <item name="android:windowSplashScreenIconBackgroundColor" tools:targetApi="31">@color/splash_background</item>
         <item name="android:windowSplashScreenAnimationDuration" tools:targetApi="31">0</item>
+        <item name="android:windowSplashScreenBehavior" tools:targetApi="33">icon_preferred</item>
     </style>
 </resources>

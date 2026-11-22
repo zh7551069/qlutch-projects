@@ -18,6 +18,7 @@ import dev.qlutch.app.R
 internal fun ColdStartVideo(onFinished: () -> Unit) {
     val background = colorResource(R.color.splash_background)
     val skipLabel = stringResource(R.string.splash_skip)
+    val launchHandoff = LocalSplashLaunchHandoff.current
     val videoView = remember { mutableStateOf<SplashVideoView?>(null) }
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
@@ -41,6 +42,7 @@ internal fun ColdStartVideo(onFinished: () -> Unit) {
             modifier = Modifier.fillMaxSize(),
             factory = { context ->
                 SplashPlaybackView(context).apply {
+                    this.launchHandoff = launchHandoff
                     video.onFinished = onFinished
                     video.startPlayback()
                     videoView.value = video

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Starting window before Android 12, and the window behind the system splash. -->
+    <item android:drawable="@color/splash_background" />
+    <!-- 2/3 of the 375-wide design, 9:16, same frame the in-app splash centers. -->
+    <item
+        android:width="250dp"
+        android:height="444.444dp"
+        android:gravity="center">
+        <bitmap
+            android:antialias="true"
+            android:filter="true"
+            android:gravity="fill"
+            android:src="@drawable/splash_first_frame" />
+    </item>
+</layer-list>

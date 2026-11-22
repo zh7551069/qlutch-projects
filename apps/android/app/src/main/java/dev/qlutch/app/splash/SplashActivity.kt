@@ -3,11 +3,13 @@ package dev.qlutch.app.splash
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
+import android.view.View
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -16,10 +18,16 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 class SplashActivity : ComponentActivity() {
     private val handedOff = AtomicBoolean(false)
+    private val launchHandoff = SplashLaunchHandoff()
     private var reduceMotion = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Before setContent, so the first traversal cannot paint an empty frame
+        // under the system splash. The splash stays until the still is laid out.
+        findViewById<View>(android.R.id.content).holdSplashUntilContentReady {
+            launchHandoff.contentReady
+        }
         reduceMotion = ReduceMotion.isEnabled(this)
         onBackPressedDispatcher.addCallback(
             this,
@@ -43,10 +51,12 @@ class SplashActivity : ComponentActivity() {
             window.isNavigationBarContrastEnforced = false
         }
         setContent {
-            if (reduceMotion) {
-                StaticWelcomeStill(onContinue = ::openNext)
-            } else {
-                ColdStartVideo(onFinished = ::openNext)
+            CompositionLocalProvider(LocalSplashLaunchHandoff provides launchHandoff) {
+                if (reduceMotion) {
+                    StaticWelcomeStill(onContinue = ::openNext)
+                } else {
+                    ColdStartVideo(onFinished = ::openNext)
+                }
             }
         }
         if (!reduceMotion) hideSystemBars()

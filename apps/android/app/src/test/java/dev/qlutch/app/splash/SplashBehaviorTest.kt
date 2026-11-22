@@ -281,9 +281,11 @@ class SplashBehaviorTest {
         assertFalse(still.contains("SplashVideoView"))
         assertFalse(still.contains("POST_COMPLETION_HOLD_MILLIS"))
 
-        assertTrue(themes.contains("android:windowBackground\">@color/splash_background"))
+        assertTrue(themes.contains("android:windowBackground\">@drawable/splash_window_background"))
         assertTrue(themes.contains("android:windowSplashScreenBackground\" tools:targetApi=\"31\">@color/splash_background"))
-        assertTrue(themes.contains("android:windowSplashScreenAnimatedIcon\" tools:targetApi=\"31\">@drawable/splash_empty_icon"))
+        assertTrue(themes.contains("android:windowSplashScreenAnimatedIcon\" tools:targetApi=\"31\">@drawable/splash_system_icon"))
+        assertTrue(themes.contains("android:windowSplashScreenIconBackgroundColor\" tools:targetApi=\"31\">@color/splash_background"))
+        assertFalse(themes.contains("splash_empty_icon"))
         assertFalse(themes.contains("splash_first_frame"))
         assertFalse(themes.contains("#FFFFFF"))
         assertTrue(activity.contains("StaticWelcomeStill(onContinue = ::openNext)"))
@@ -384,7 +386,7 @@ class SplashBehaviorTest {
         val colors = moduleFile("src/main/res/values/colors.xml").readText()
         assertTrue(colors.contains("<color name=\"splash_background\">#F2F5F7</color>"))
         val themes = moduleFile("src/main/res/values/themes.xml").readText()
-        assertTrue(themes.contains("android:windowBackground\">@color/splash_background"))
+        assertTrue(themes.contains("android:windowBackground\">@drawable/splash_window_background"))
         assertTrue(themes.contains("android:windowSplashScreenBackground\" tools:targetApi=\"31\">@color/splash_background"))
         assertFalse(themes.contains("@color/canvas"))
 
@@ -610,6 +612,158 @@ class SplashBehaviorTest {
                     assertEquals(0xF7, image.blue(x, y), 8)
                 }
         }
+    }
+
+    @Test
+    fun systemSplashShowsTheSquirrelUntilTheInAppStillIsDrawn() {
+        val themes = moduleFile("src/main/res/values/themes.xml").readText()
+        assertTrue(themes.contains("android:windowSplashScreenBackground\" tools:targetApi=\"31\">@color/splash_background"))
+        assertTrue(themes.contains("android:windowSplashScreenAnimatedIcon\" tools:targetApi=\"31\">@drawable/splash_system_icon"))
+        assertTrue(themes.contains("android:windowSplashScreenIconBackgroundColor\" tools:targetApi=\"31\">@color/splash_background"))
+        assertTrue(themes.contains("android:windowSplashScreenAnimationDuration\" tools:targetApi=\"31\">0"))
+        assertTrue(themes.contains("android:windowSplashScreenBehavior\" tools:targetApi=\"33\">icon_preferred"))
+        assertTrue(themes.contains("android:windowBackground\">@drawable/splash_window_background"))
+        assertFalse(themes.contains("splash_empty_icon"))
+        assertFalse(themes.contains("splash_first_frame"))
+        assertFalse(themes.contains("#FFFFFF"))
+        assertTrue(moduleFileIfExists("src/main/res/drawable/splash_empty_icon.xml") == null)
+
+        val window = moduleFile("src/main/res/drawable/splash_window_background.xml").readText()
+        assertTrue(window.contains("@color/splash_background"))
+        assertTrue(window.contains("@drawable/splash_first_frame"))
+        assertTrue(window.contains("android:width=\"250dp\""))
+        assertTrue(window.contains("android:height=\"444.444dp\""))
+        assertTrue(window.contains("android:gravity=\"center\""))
+        assertTrue(window.contains("android:gravity=\"fill\""))
+        assertEquals(375f * (2f / 3f), 250f, 0.001f)
+        assertEquals(250f * 16f / 9f, 444.444f, 0.001f)
+
+        val colors = moduleFile("src/main/res/values/colors.xml").readText()
+        assertTrue(colors.contains("<color name=\"splash_background\">#F2F5F7</color>"))
+
+        val iconBytes = moduleFile("src/main/res/drawable-nodpi/splash_system_icon.png").readBytes()
+        assertEquals(
+            "e62f4baee84ae3ae45fb2c3fcbc51888ff5acd62d29bdb3e4dbc78a660073045",
+            sha256(iconBytes),
+        )
+        val icon = decodePng(iconBytes)
+        assertEquals(SplashSystemIcon.CANVAS_PX, icon.width)
+        assertEquals(SplashSystemIcon.CANVAS_PX, icon.height)
+        val source = decodePng(moduleFile("src/main/res/drawable-nodpi/splash_first_frame.png").readBytes())
+        assertEquals(0xF2, icon.red(0, 0))
+        assertEquals(0xF5, icon.green(0, 0))
+        assertEquals(0xF7, icon.blue(0, 0))
+        assertEquals(0xF2, icon.red(icon.width - 1, icon.height - 1))
+        assertEquals(0xF5, icon.green(icon.width - 1, icon.height - 1))
+        assertEquals(0xF7, icon.blue(icon.width - 1, icon.height - 1))
+        val edge = 40
+        for (x in 0 until icon.width) {
+            assertEquals(0xF2, icon.red(x, edge / 2))
+            assertEquals(0xF2, icon.red(x, icon.height - 1 - edge / 2))
+        }
+        val safeRadius = SplashSystemIcon.safeRadiusPx()
+        assertEquals(330f, safeRadius, 0.001f)
+        assertEquals(66f / 108f, safeRadius * 2f / SplashSystemIcon.CANVAS_PX, 0.0001f)
+        val scale = SplashSystemIcon.scale()
+        assertTrue(scale < 1f)
+        assertTrue(scale > 0.5f)
+        val center = SplashSystemIcon.CANVAS_PX / 2f
+        var content = 0
+        for (y in 0 until icon.height) {
+            for (x in 0 until icon.width) {
+                val offBackground = kotlin.math.max(
+                    kotlin.math.abs(icon.red(x, y) - 0xF2),
+                    kotlin.math.max(
+                        kotlin.math.abs(icon.green(x, y) - 0xF5),
+                        kotlin.math.abs(icon.blue(x, y) - 0xF7),
+                    ),
+                ) > 12
+                if (!offBackground) continue
+                content += 1
+                val dx = x + 0.5f - center
+                val dy = y + 0.5f - center
+                assertTrue(
+                    "squirrel pixel leaves the safe circle at $x,$y",
+                    dx * dx + dy * dy <= safeRadius * safeRadius + 1f,
+                )
+            }
+        }
+        assertTrue(content > 50_000)
+        listOf(540 to 540, 480 to 430, 620 to 500).forEach { (x, y) ->
+            val sx = SplashSystemIcon.contentCenterX() + (x + 0.5f - center) / scale
+            val sy = SplashSystemIcon.contentCenterY() + (y + 0.5f - center) / scale
+            val sourceX = sx.toInt().coerceIn(0, source.width - 1)
+            val sourceY = sy.toInt().coerceIn(0, source.height - 1)
+            assertEquals(source.red(sourceX, sourceY), icon.red(x, y), 24)
+            assertEquals(source.green(sourceX, sourceY), icon.green(x, y), 24)
+            assertEquals(source.blue(sourceX, sourceY), icon.blue(x, y), 24)
+        }
+        val farX = SplashSystemIcon.FARTHEST_X
+        val farY = SplashSystemIcon.FARTHEST_Y
+        val farDelta = kotlin.math.abs(source.red(farX, farY) - source.red(0, 0)) +
+            kotlin.math.abs(source.green(farX, farY) - source.green(0, 0)) +
+            kotlin.math.abs(source.blue(farX, farY) - source.blue(0, 0))
+        assertTrue("farthest pixel is background, so the crop radius is wrong", farDelta > 12)
+
+        val missingStill = SplashLaunchHandoff()
+        missingStill.onStillLaidOut(0, 1280)
+        missingStill.onWordmarkLaidOut(396, 100)
+        missingStill.onSloganLaidOut(396, 40)
+        assertFalse("a zero-size still is not on screen", missingStill.contentReady)
+
+        val missingSlogan = SplashLaunchHandoff()
+        missingSlogan.onStillLaidOut(720, 1280)
+        missingSlogan.onWordmarkLaidOut(396, 100)
+        assertFalse("the still without the slogan is not the in-app splash", missingSlogan.contentReady)
+
+        val handoff = SplashLaunchHandoff()
+        handoff.onStillLaidOut(720, 1280)
+        handoff.onWordmarkLaidOut(0, 0)
+        handoff.onSloganLaidOut(0, 0)
+        assertFalse(handoff.contentReady)
+        handoff.onWordmarkLaidOut(396, 100)
+        assertFalse(handoff.contentReady)
+        handoff.onSloganLaidOut(396, 40)
+        assertTrue(handoff.contentReady)
+        handoff.onStillLaidOut(0, 0)
+        assertTrue("a later empty pass does not bring the system splash back", handoff.contentReady)
+
+        val blocked = SplashDrawGate { false }
+        assertFalse(blocked.onPreDraw())
+        assertFalse(blocked.released)
+        assertFalse(blocked.onPreDraw())
+        var ready = false
+        val gate = SplashDrawGate { ready }
+        assertFalse(gate.onPreDraw())
+        ready = true
+        assertTrue(gate.onPreDraw())
+        assertTrue(gate.released)
+        ready = false
+        assertTrue(gate.onPreDraw())
+
+        val activity = moduleFile("src/main/java/dev/qlutch/app/splash/SplashActivity.kt").readText()
+        assertTrue(
+            activity.indexOf("holdSplashUntilContentReady") < activity.indexOf("setContent {"),
+        )
+        assertTrue(activity.contains("launchHandoff.contentReady"))
+        assertTrue(activity.contains("LocalSplashLaunchHandoff provides launchHandoff"))
+        assertTrue(activity.contains("StaticWelcomeStill(onContinue = ::openNext)"))
+        assertTrue(activity.contains("ColdStartVideo(onFinished = ::openNext)"))
+        val video = moduleFile("src/main/java/dev/qlutch/app/splash/SplashVideoView.kt").readText()
+        val still = moduleFile("src/main/java/dev/qlutch/app/splash/StaticWelcomeStill.kt").readText()
+        val frame = moduleFile("src/main/java/dev/qlutch/app/splash/SplashFrame.kt").readText()
+        assertTrue(video.contains("handoff.onStillLaidOut(frameWidth, frameHeight)"))
+        assertTrue(video.contains("handoff.onWordmarkLaidOut(markWidth, markHeight)"))
+        assertTrue(video.contains("handoff.onSloganLaidOut(slogan.width, slogan.height)"))
+        assertTrue(video.indexOf("layoutSplashSlogan(slogan, frameWidth, frameHeight)") < video.indexOf("handoff.onSloganLaidOut"))
+        assertTrue(still.contains("launchHandoff.onStillLaidOut(size.width, size.height)"))
+        assertTrue(still.contains("launchHandoff.onSloganLaidOut(width, height)"))
+        assertTrue(still.contains("delay(SplashTiming.STATIC_HOLD_MILLIS)"))
+        assertFalse(still.contains("POST_COMPLETION_HOLD_MILLIS"))
+        assertTrue(frame.contains("launchHandoff.onWordmarkLaidOut(size.width, size.height)"))
+        assertEquals(2f / 3f, SplashLayout.WIDTH_FRACTION, 0f)
+        assertEquals(1_600L, SplashTiming.STATIC_HOLD_MILLIS)
+        assertEquals(1_000L, SplashTiming.POST_COMPLETION_HOLD_MILLIS)
     }
 
     private class HoldClock {
