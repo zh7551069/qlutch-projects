@@ -32,7 +32,11 @@ internal fun ColdStartVideo(onFinished: () -> Unit) {
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
-    SplashStage(background = background, onTap = onFinished, tapLabel = skipLabel) {
+    SplashStage(
+        background = background,
+        onTap = { videoView.value?.skip() ?: onFinished() },
+        tapLabel = skipLabel,
+    ) {
         AndroidView(
             modifier = Modifier.fillMaxSize(),
             factory = { context ->

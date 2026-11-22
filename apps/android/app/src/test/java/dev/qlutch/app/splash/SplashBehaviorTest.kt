@@ -65,6 +65,106 @@ class SplashBehaviorTest {
     @Test
     fun staticHoldStaysInsideTheEntranceBudget() {
         assertTrue(SplashTiming.STATIC_HOLD_MILLIS in 1_200L..2_000L)
+        assertEquals(1_600L, SplashTiming.STATIC_HOLD_MILLIS)
+    }
+
+    @Test
+    fun naturalCompletionHoldsTheLastFrameForOneSecondThenLeavesOnce() {
+        assertEquals(1_000L, SplashTiming.POST_COMPLETION_HOLD_MILLIS)
+        val clock = HoldClock()
+        val hold = SplashCompletionHold(schedule = clock::schedule)
+        var leaves = 0
+        hold.onNaturalCompletion { leaves += 1 }
+        hold.onNaturalCompletion { leaves += 1 }
+        assertEquals(listOf(SplashTiming.POST_COMPLETION_HOLD_MILLIS), clock.delays)
+        clock.advance(SplashTiming.POST_COMPLETION_HOLD_MILLIS - 1)
+        assertEquals(0, leaves)
+        clock.advance(1)
+        assertEquals(1, leaves)
+        clock.advance(SplashTiming.POST_COMPLETION_HOLD_MILLIS)
+        hold.onNaturalCompletion { leaves += 1 }
+        assertEquals(1, leaves)
+        assertEquals(1, clock.delays.size)
+    }
+
+    @Test
+    fun skipDuringThePostCompletionHoldLeavesImmediately() {
+        val clock = HoldClock()
+        val hold = SplashCompletionHold(schedule = clock::schedule)
+        var leaves = 0
+        hold.onNaturalCompletion { leaves += 1 }
+        clock.advance(400)
+        assertEquals(0, leaves)
+        hold.onSkip { leaves += 1 }
+        assertEquals(1, leaves)
+        clock.advance(5_000)
+        assertEquals(1, leaves)
+        assertEquals(listOf(SplashTiming.POST_COMPLETION_HOLD_MILLIS), clock.delays)
+
+        val playing = HoldClock()
+        val duringPlayback = SplashCompletionHold(schedule = playing::schedule)
+        var skipped = 0
+        duringPlayback.onSkip { skipped += 1 }
+        assertEquals(1, skipped)
+        assertTrue(playing.delays.isEmpty())
+        duringPlayback.onNaturalCompletion { skipped += 1 }
+        playing.advance(SplashTiming.POST_COMPLETION_HOLD_MILLIS)
+        assertEquals(1, skipped)
+
+        val released = HoldClock()
+        val held = SplashCompletionHold(schedule = released::schedule)
+        var releasedLeaves = 0
+        held.onNaturalCompletion { releasedLeaves += 1 }
+        held.cancelPending()
+        released.advance(SplashTiming.POST_COMPLETION_HOLD_MILLIS)
+        assertEquals(0, releasedLeaves)
+    }
+
+    @Test
+    fun playbackUsesThePostCompletionHoldAndSkipStaysImmediate() {
+        val timing = moduleFile("src/main/java/dev/qlutch/app/splash/SplashTiming.kt").readText()
+        val video = moduleFile("src/main/java/dev/qlutch/app/splash/SplashVideoView.kt").readText()
+        val playback = moduleFile("src/main/java/dev/qlutch/app/splash/ColdStartVideo.kt").readText()
+        val activity = moduleFile("src/main/java/dev/qlutch/app/splash/SplashActivity.kt").readText()
+        val still = moduleFile("src/main/java/dev/qlutch/app/splash/StaticWelcomeStill.kt").readText()
+
+        assertTrue(timing.contains("const val POST_COMPLETION_HOLD_MILLIS = 1_000L"))
+        assertTrue(timing.contains("holdMillis: Long = SplashTiming.POST_COMPLETION_HOLD_MILLIS"))
+        assertTrue(timing.contains("const val STATIC_HOLD_MILLIS = 1_600L"))
+
+        val completion = video.substringAfter("setOnCompletionListener").substringBefore("setOnErrorListener")
+        assertTrue(completion.contains("finished = true"))
+        assertTrue(completion.contains("onNaturalCompletion"))
+        assertFalse(completion.contains("start()"))
+        assertFalse(completion.contains("isLooping = true"))
+        val skip = video.substringAfter("fun skip()").substringBefore("fun startPlayback()")
+        assertTrue(skip.contains("finished = true"))
+        assertTrue(skip.contains("onSkip"))
+        assertFalse(skip.contains("postDelayed"))
+        assertFalse(skip.contains("1_000L"))
+        assertTrue(video.contains("player.isLooping = false"))
+        assertTrue(video.contains("if (released || !prepared || finished || surface == null) return"))
+        assertTrue(video.contains("completionHold.cancelPending()"))
+        assertFalse(video.contains("isLooping = true"))
+
+        assertTrue(playback.contains("onTap = { videoView.value?.skip() ?: onFinished() }"))
+        assertTrue(playback.contains("video.onFinished = onFinished"))
+        assertFalse(playback.contains("POST_COMPLETION_HOLD_MILLIS"))
+        assertFalse(playback.contains("delay("))
+
+        assertTrue(
+            activity.contains(
+                "override fun handleOnBackPressed() {\n                    openNext()\n                }",
+            ),
+        )
+        assertTrue(activity.contains("MainActivity::class.java"))
+        assertFalse(activity.contains("POST_COMPLETION_HOLD_MILLIS"))
+        assertFalse(activity.contains("postDelayed"))
+        assertFalse(activity.contains("delay("))
+
+        assertTrue(still.contains("delay(SplashTiming.STATIC_HOLD_MILLIS)"))
+        assertFalse(still.contains("POST_COMPLETION_HOLD_MILLIS"))
+        assertFalse(still.contains("SplashVideoView"))
     }
 
     @Test
@@ -408,6 +508,33 @@ class SplashBehaviorTest {
                     assertEquals(0xF5, image.green(x, y), 8)
                     assertEquals(0xF7, image.blue(x, y), 8)
                 }
+        }
+    }
+
+    private class HoldClock {
+        private var now = 0L
+        val delays = mutableListOf<Long>()
+        private val tasks = mutableListOf<Scheduled>()
+
+        private class Scheduled(
+            val due: Long,
+            val action: () -> Unit,
+            var cancelled: Boolean = false,
+        )
+
+        fun schedule(delayMillis: Long, action: () -> Unit): SplashCompletionHold.Cancellable {
+            delays += delayMillis
+            val scheduled = Scheduled(now + delayMillis, action)
+            tasks += scheduled
+            return SplashCompletionHold.Cancellable { scheduled.cancelled = true }
+        }
+
+        fun advance(millis: Long) {
+            check(millis >= 0L)
+            now += millis
+            val due = tasks.filter { !it.cancelled && it.due <= now }
+            tasks.removeAll(due)
+            due.forEach { it.action() }
         }
     }
 

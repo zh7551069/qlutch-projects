@@ -19,16 +19,26 @@ import kotlin.math.roundToInt
 /**
  * Plays the silent welcome clip fitted inside this view.
  * The view is the centered 9:16 frame, and [containScale] keeps the whole picture
- * visible. Completion and decode failure call [onFinished]. Taps are handled by the overlay.
+ * visible. Natural completion keeps the last frame for
+ * [SplashTiming.POST_COMPLETION_HOLD_MILLIS], then calls [onFinished].
+ * Decode failure calls [onFinished] immediately. [skip] leaves immediately,
+ * including during that hold, and does not replay the clip.
+ * Taps are handled by the overlay.
  */
 internal class SplashVideoView(context: Context) : TextureView(context), TextureView.SurfaceTextureListener {
     var onFinished: (() -> Unit)? = null
 
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val completionHold = SplashCompletionHold({ delayMillis, action ->
+        val runnable = Runnable { action() }
+        mainHandler.postDelayed(runnable, delayMillis)
+        SplashCompletionHold.Cancellable { mainHandler.removeCallbacks(runnable) }
+    })
     private val player = MediaPlayer()
     private var surface: Surface? = null
     private var prepared = false
     private var finished = false
+    private var navigated = false
     private var released = false
     private var started = false
     private var inForeground = true
@@ -48,11 +58,26 @@ internal class SplashVideoView(context: Context) : TextureView(context), Texture
             }
         }
         player.setOnVideoSizeChangedListener { _, _, _ -> applyContain() }
-        player.setOnCompletionListener { dispatchFinished() }
+        // Natural end only. Looping stays off, so the last frame remains for the hold.
+        // Do not start the player again from here.
+        player.setOnCompletionListener {
+            if (released || finished || navigated) return@setOnCompletionListener
+            finished = true
+            val callback = onFinished
+            completionHold.onNaturalCompletion { deliverNow(callback) }
+        }
         player.setOnErrorListener { _, _, _ ->
             dispatchFinished()
             true
         }
+    }
+
+    /** Immediate leave for a tap during playback or during the last-frame hold. */
+    fun skip() {
+        if (navigated) return
+        finished = true
+        val callback = onFinished
+        completionHold.onSkip { deliverNow(callback) }
     }
 
     fun startPlayback() {
@@ -98,6 +123,7 @@ internal class SplashVideoView(context: Context) : TextureView(context), Texture
     fun releasePlayer() {
         if (released) return
         released = true
+        completionHold.cancelPending()
         player.setOnPreparedListener(null)
         player.setOnCompletionListener(null)
         player.setOnErrorListener(null)
@@ -178,11 +204,18 @@ internal class SplashVideoView(context: Context) : TextureView(context), Texture
         setTransform(matrix)
     }
 
+    private fun deliverNow(callback: (() -> Unit)?) {
+        if (navigated) return
+        navigated = true
+        callback?.invoke()
+    }
+
     private fun dispatchFinished() {
-        if (finished || released) return
+        if (navigated || released) return
         finished = true
+        completionHold.cancelPending()
         val callback = onFinished
-        mainHandler.post { callback?.invoke() }
+        mainHandler.post { deliverNow(callback) }
     }
 }
 
