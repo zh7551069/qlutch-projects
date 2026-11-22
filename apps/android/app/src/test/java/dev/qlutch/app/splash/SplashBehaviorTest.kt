@@ -197,6 +197,105 @@ class SplashBehaviorTest {
     }
 
     @Test
+    fun firstFrameStillCoversThePlateUntilTheVideoPaints() {
+        val file = moduleFile("src/main/res/drawable-nodpi/splash_first_frame.png")
+        val bytes = file.readBytes()
+        assertEquals(589309, bytes.size)
+        assertEquals(
+            "b3a459008a1e233c34bd695c4849cf4d962c2e03060154351f4e071b8a7f373d",
+            sha256(bytes),
+        )
+        val image = decodePng(bytes)
+        assertEquals(1080, image.width)
+        assertEquals(1920, image.height)
+        assertEquals(1080f / 1920f, image.width.toFloat() / image.height.toFloat(), 0.0001f)
+        val corner = Triple(image.red(0, 0), image.green(0, 0), image.blue(0, 0))
+        val body = Triple(image.red(540, 1400), image.green(540, 1400), image.blue(540, 1400))
+        assertTrue(corner != Triple(255, 255, 255))
+        assertTrue(body != corner)
+
+        val cover = SplashPosterCover()
+        assertTrue(cover.showingStill)
+        cover.onPlayerPrepared()
+        assertTrue("prepared player is still a blank plate", cover.showingStill)
+        cover.onSurfaceAttached()
+        assertTrue("a new surface can still be empty", cover.showingStill)
+        cover.onFirstFrameRendered()
+        assertFalse(cover.showingStill)
+        cover.onPlayerPrepared()
+        cover.onSurfaceAttached()
+        cover.onFirstFrameRendered()
+        assertFalse(cover.showingStill)
+
+        val video = moduleFile("src/main/java/dev/qlutch/app/splash/SplashVideoView.kt").readText()
+        val still = moduleFile("src/main/java/dev/qlutch/app/splash/StaticWelcomeStill.kt").readText()
+        val themes = moduleFile("src/main/res/values/themes.xml").readText()
+        val activity = moduleFile("src/main/java/dev/qlutch/app/splash/SplashActivity.kt").readText()
+
+        assertTrue(video.contains("setImageResource(R.drawable.splash_first_frame)"))
+        assertTrue(video.contains("scaleType = ImageView.ScaleType.FIT_CENTER"))
+        assertTrue(video.contains("posterCover.onPlayerPrepared()"))
+        assertTrue(video.contains("posterCover.onSurfaceAttached()"))
+        assertTrue(video.contains("posterCover.onFirstFrameRendered()"))
+        assertTrue(video.contains("if (posterCover.showingStill) View.VISIBLE else View.INVISIBLE"))
+        assertTrue(video.indexOf("addView(\n            video") < video.indexOf("addView(\n            poster"))
+        assertTrue(video.indexOf("addView(\n            poster") < video.indexOf("addView(\n            wordmark"))
+        assertTrue(video.indexOf("addView(\n            wordmark") < video.indexOf("addView(\n            slogan"))
+        assertTrue(video.contains("layoutSplashSlogan"))
+        assertTrue(video.contains("wordmarkInFrame"))
+
+        val prepared = video.substringAfter("setOnPreparedListener").substringBefore("setOnVideoSizeChangedListener")
+        assertTrue(prepared.contains("onPlaybackPrepared?.invoke()"))
+        assertFalse(prepared.contains("onFirstFrameRendered"))
+        assertFalse(prepared.contains("INVISIBLE"))
+        assertFalse(prepared.contains("splash_first_frame"))
+
+        val surface = video.substringAfter("fun onSurfaceTextureAvailable").substringBefore("fun onSurfaceTextureSizeChanged")
+        assertTrue(surface.contains("onSurfaceReady?.invoke()"))
+        assertFalse(surface.contains("onFirstFrameRendered"))
+
+        val updated = video.substringAfter("fun onSurfaceTextureUpdated").substringBefore("fun onSizeChanged")
+        assertTrue(updated.contains("notifyFirstFrameRendered()"))
+        val notify = video.substringAfter("fun notifyFirstFrameRendered()").substringBefore("fun applyContain()")
+        assertTrue(notify.contains("if (released || firstFrameNotified || !prepared) return"))
+        assertTrue(notify.contains("renderingStarted || textureUpdatesAfterPrepare >= 2"))
+        assertTrue(notify.contains("onFirstFrameRendered?.invoke()"))
+        assertFalse(notify.contains("start()"))
+        val info = video.substringAfter("setOnInfoListener").substringBefore("fun skip()")
+        assertTrue(info.contains("MEDIA_INFO_VIDEO_RENDERING_START"))
+        assertTrue(info.contains("renderingStarted = true"))
+        assertFalse(info.contains("onFirstFrameRendered"))
+
+        val skip = video.substringAfter("fun skip()").substringBefore("fun startPlayback()")
+        assertTrue(skip.contains("onSkip"))
+        assertFalse(skip.contains("showingStill"))
+        assertFalse(skip.contains("splash_first_frame"))
+        assertFalse(skip.contains("postDelayed"))
+
+        assertTrue(still.contains("painter = painterResource(R.drawable.splash_first_frame)"))
+        assertTrue(still.contains("ContentScale.Fit"))
+        assertTrue(still.contains("G4Wordmark()"))
+        assertTrue(still.contains("SplashSloganHost"))
+        assertTrue(still.contains("delay(SplashTiming.STATIC_HOLD_MILLIS)"))
+        assertFalse(still.contains("MediaMetadataRetriever"))
+        assertFalse(still.contains("SplashVideoView"))
+        assertFalse(still.contains("POST_COMPLETION_HOLD_MILLIS"))
+
+        assertTrue(themes.contains("android:windowBackground\">@color/splash_background"))
+        assertTrue(themes.contains("android:windowSplashScreenBackground\" tools:targetApi=\"31\">@color/splash_background"))
+        assertTrue(themes.contains("android:windowSplashScreenAnimatedIcon\" tools:targetApi=\"31\">@drawable/splash_empty_icon"))
+        assertFalse(themes.contains("splash_first_frame"))
+        assertFalse(themes.contains("#FFFFFF"))
+        assertTrue(activity.contains("StaticWelcomeStill(onContinue = ::openNext)"))
+        assertTrue(activity.contains("ColdStartVideo(onFinished = ::openNext)"))
+        assertTrue(
+            activity.contains(
+                "override fun handleOnBackPressed() {\n                    openNext()\n                }",
+            ),
+        )
+    }
+
+    @Test
     fun packedWelcomeClipBytesAreTheCleanEdgeV4File() {
         val file = moduleFile("src/main/res/raw/splash.mp4")
         val bytes = file.readBytes()
@@ -321,7 +420,9 @@ class SplashBehaviorTest {
         assertTrue(shown.contains("OnBackPressedCallback"))
         assertTrue(shown.contains("ContentScale.Fit"))
         assertTrue(shown.contains("ScaleType.FIT_CENTER"))
-        assertTrue(shown.contains("getFrameAtIndex(0)"))
+        assertTrue(shown.contains("splash_first_frame"))
+        assertFalse(shown.contains("getFrameAtIndex"))
+        assertFalse(shown.contains("MediaMetadataRetriever"))
         assertTrue(shown.contains("splash_g4_wordmark"))
         assertTrue(shown.contains("LANDING_SHADOW_BOTTOM_Y"))
         assertTrue(shown.contains("wordmarkInFrame"))

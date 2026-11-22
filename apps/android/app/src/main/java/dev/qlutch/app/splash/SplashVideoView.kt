@@ -28,6 +28,17 @@ import kotlin.math.roundToInt
 internal class SplashVideoView(context: Context) : TextureView(context), TextureView.SurfaceTextureListener {
     var onFinished: (() -> Unit)? = null
 
+    /**
+     * Player is prepared, but no frame has been painted yet. The still stays up.
+     */
+    var onPlaybackPrepared: (() -> Unit)? = null
+
+    /** Surface is attached. It can still be empty, so the still stays up. */
+    var onSurfaceReady: (() -> Unit)? = null
+
+    /** A decoded frame is on this texture. Safe to retire the still. */
+    var onFirstFrameRendered: (() -> Unit)? = null
+
     private val mainHandler = Handler(Looper.getMainLooper())
     private val completionHold = SplashCompletionHold({ delayMillis, action ->
         val runnable = Runnable { action() }
@@ -42,6 +53,9 @@ internal class SplashVideoView(context: Context) : TextureView(context), Texture
     private var released = false
     private var started = false
     private var inForeground = true
+    private var firstFrameNotified = false
+    private var renderingStarted = false
+    private var textureUpdatesAfterPrepare = 0
 
     init {
         isOpaque = false
@@ -56,6 +70,7 @@ internal class SplashVideoView(context: Context) : TextureView(context), Texture
             if (surface != null && inForeground) {
                 mp.start()
             }
+            onPlaybackPrepared?.invoke()
         }
         player.setOnVideoSizeChangedListener { _, _, _ -> applyContain() }
         // Natural end only. Looping stays off, so the last frame remains for the hold.
@@ -69,6 +84,14 @@ internal class SplashVideoView(context: Context) : TextureView(context), Texture
         player.setOnErrorListener { _, _, _ ->
             dispatchFinished()
             true
+        }
+        // The info callback can arrive before the texture has the buffer.
+        // Revealing there would flash the empty TextureView, so this only arms the swap.
+        player.setOnInfoListener { _, what, _ ->
+            if (what == MediaPlayer.MEDIA_INFO_VIDEO_RENDERING_START) {
+                renderingStarted = true
+            }
+            false
         }
     }
 
@@ -127,6 +150,7 @@ internal class SplashVideoView(context: Context) : TextureView(context), Texture
         player.setOnPreparedListener(null)
         player.setOnCompletionListener(null)
         player.setOnErrorListener(null)
+        player.setOnInfoListener(null)
         player.setOnVideoSizeChangedListener(null)
         try {
             player.setSurface(null)
@@ -163,8 +187,10 @@ internal class SplashVideoView(context: Context) : TextureView(context), Texture
                 player.start()
             } catch (_: IllegalStateException) {
                 dispatchFinished()
+                return
             }
         }
+        onSurfaceReady?.invoke()
     }
 
     override fun onSurfaceTextureSizeChanged(surfaceTexture: SurfaceTexture, width: Int, height: Int) {
@@ -181,11 +207,24 @@ internal class SplashVideoView(context: Context) : TextureView(context), Texture
         return true
     }
 
-    override fun onSurfaceTextureUpdated(surfaceTexture: SurfaceTexture) = Unit
+    override fun onSurfaceTextureUpdated(surfaceTexture: SurfaceTexture) {
+        if (prepared && !released) textureUpdatesAfterPrepare += 1
+        notifyFirstFrameRendered()
+    }
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
         applyContain()
+    }
+
+    private fun notifyFirstFrameRendered() {
+        if (released || firstFrameNotified || !prepared) return
+        // A single texture update before the renderer starts can be a blank buffer.
+        // Wait until the renderer has started, or until a second update proves a frame.
+        val frameOnTexture = renderingStarted || textureUpdatesAfterPrepare >= 2
+        if (!frameOnTexture) return
+        firstFrameNotified = true
+        onFirstFrameRendered?.invoke()
     }
 
     private fun applyContain() {
@@ -220,12 +259,26 @@ internal class SplashVideoView(context: Context) : TextureView(context), Texture
 }
 
 /**
- * Centered welcome clip with the G4 wordmark and the slogan drawn after the texture.
- * Both are laid out from the landing shadow, not from the player position,
- * so they stay put when the squirrel jumps. Neither is part of the mp4.
+ * Centered welcome clip with the packed first frame, the G4 wordmark, and the slogan.
+ * The still covers the texture until a real frame is on screen, so startup is not an
+ * empty plate. The wordmark and slogan are laid out from the landing shadow, not from
+ * the player position, so they stay put when the squirrel jumps. Neither is part of the mp4.
  */
 internal class SplashPlaybackView(context: Context) : FrameLayout(context) {
     val video: SplashVideoView = SplashVideoView(context)
+    private val posterCover = SplashPosterCover()
+    private val poster: ImageView = PassThroughImageView(context).apply {
+        setImageResource(R.drawable.splash_first_frame)
+        scaleType = ImageView.ScaleType.FIT_CENTER
+        imageTintList = null
+        setBackgroundColor(context.getColor(R.color.splash_background))
+        visibility = View.VISIBLE
+        contentDescription = null
+        importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        isClickable = false
+        isFocusable = false
+        isFocusableInTouchMode = false
+    }
     private val wordmark: ImageView = PassThroughImageView(context).apply {
         setImageResource(R.drawable.splash_g4_wordmark)
         scaleType = ImageView.ScaleType.FIT_CENTER
@@ -247,6 +300,10 @@ internal class SplashPlaybackView(context: Context) : FrameLayout(context) {
             LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT),
         )
         addView(
+            poster,
+            LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT),
+        )
+        addView(
             wordmark,
             LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT),
         )
@@ -254,12 +311,34 @@ internal class SplashPlaybackView(context: Context) : FrameLayout(context) {
             slogan,
             LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT),
         )
+        video.onPlaybackPrepared = {
+            posterCover.onPlayerPrepared()
+            syncPoster()
+        }
+        video.onSurfaceReady = {
+            posterCover.onSurfaceAttached()
+            syncPoster()
+        }
+        video.onFirstFrameRendered = {
+            posterCover.onFirstFrameRendered()
+            syncPoster()
+        }
+        syncPoster()
+    }
+
+    private fun syncPoster() {
+        poster.visibility = if (posterCover.showingStill) View.VISIBLE else View.INVISIBLE
     }
 
     override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
         val frameWidth = right - left
         val frameHeight = bottom - top
         video.layout(0, 0, frameWidth, frameHeight)
+        poster.measure(
+            View.MeasureSpec.makeMeasureSpec(frameWidth.coerceAtLeast(0), View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(frameHeight.coerceAtLeast(0), View.MeasureSpec.EXACTLY),
+        )
+        poster.layout(0, 0, frameWidth, frameHeight)
         if (frameWidth <= 0 || frameHeight <= 0) {
             wordmark.layout(0, 0, 0, 0)
             slogan.layout(0, 0, 0, 0)
