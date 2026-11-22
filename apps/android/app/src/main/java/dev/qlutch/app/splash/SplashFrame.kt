@@ -22,6 +22,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import dev.qlutch.app.R
+import kotlin.math.roundToInt
 
 internal object SplashLayout {
     /** Welcome clip width as a fraction of the splash window width. */
@@ -192,6 +193,49 @@ internal data class FrameSlogan(
     val textWidth: Float,
     val gap: Float,
 )
+
+/**
+ * Pixel frame the in-app splash stage actually lays out.
+ *
+ * Compose sizes the stage in dp and rounds each edge to px, then centers it.
+ * [SplashLayout.placement] is the same math in one unit; this applies the dp
+ * rounding the stage uses, so a window background drawn from real pixels lands
+ * on the same rect as the TextureView. A fixed 9:16 bitmap stretched to the
+ * screen is a different rect on every aspect ratio, so this does not do that.
+ */
+internal data class PxRect(
+    val left: Int,
+    val top: Int,
+    val width: Int,
+    val height: Int,
+)
+
+internal object SplashLaunchGeometry {
+    fun framePx(screenWidthPx: Int, screenHeightPx: Int, density: Float): PxRect {
+        if (screenWidthPx <= 0 || screenHeightPx <= 0 || density <= 0f) {
+            return PxRect(0, 0, 0, 0)
+        }
+        val screenWidthDp = screenWidthPx / density
+        val (frameWidthDp, frameHeightDp) = SplashLayout.frameSize(screenWidthDp)
+        val width = (frameWidthDp * density).roundToInt().coerceAtLeast(0)
+        val height = (frameHeightDp * density).roundToInt().coerceAtLeast(0)
+        val left = ((screenWidthPx - width) / 2f).roundToInt()
+        val top = ((screenHeightPx - height) / 2f).roundToInt()
+        return PxRect(left, top, width, height)
+    }
+
+    /** Wordmark box inside the frame. Same rounding as the playback view. */
+    fun wordmarkInFramePx(frameWidthPx: Int, frameHeightPx: Int): PxRect {
+        if (frameWidthPx <= 0 || frameHeightPx <= 0) return PxRect(0, 0, 0, 0)
+        val mark = SplashLayout.wordmarkInFrame(frameWidthPx.toFloat(), frameHeightPx.toFloat())
+        return PxRect(
+            left = mark.left.roundToInt(),
+            top = mark.top.roundToInt(),
+            width = mark.width.roundToInt().coerceAtLeast(0),
+            height = mark.height.roundToInt().coerceAtLeast(0),
+        )
+    }
+}
 
 internal data class SplashPlacement(
     val frameLeft: Float,

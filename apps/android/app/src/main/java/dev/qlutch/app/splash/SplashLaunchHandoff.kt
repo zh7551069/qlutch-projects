@@ -3,47 +3,6 @@ package dev.qlutch.app.splash
 import android.view.View
 import android.view.ViewTreeObserver
 import androidx.compose.runtime.staticCompositionLocalOf
-import kotlin.math.sqrt
-
-/**
- * Square crop of the welcome clip's first frame used as the Android 12+ splash icon.
- *
- * The system draws that icon through the same inset as an adaptive icon: a circle
- * whose diameter is 2/3 of the bitmap, and OEM masks can trim that circle to the
- * 66/108 safe zone. [scale] fits the whole squirrel, tail included, inside that
- * circle. The 9:16 frame itself is not the icon.
- */
-internal object SplashSystemIcon {
-    const val CANVAS_PX = 1080
-    const val SAFE_ZONE_NUMERATOR = 66
-    const val SAFE_ZONE_DENOMINATOR = 108
-
-    /** Inclusive bounds of the non-background pixels in splash_first_frame.png. */
-    const val CONTENT_LEFT = 96
-    const val CONTENT_TOP = 498
-    const val CONTENT_RIGHT = 855
-    const val CONTENT_BOTTOM = 1449
-
-    /** Content pixel farthest from the content-box center. */
-    const val FARTHEST_X = 791
-    const val FARTHEST_Y = 1383
-
-    fun contentCenterX(): Float = (CONTENT_LEFT + CONTENT_RIGHT) / 2f
-
-    fun contentCenterY(): Float = (CONTENT_TOP + CONTENT_BOTTOM) / 2f
-
-    fun safeRadiusPx(): Float =
-        CANVAS_PX * SAFE_ZONE_NUMERATOR / (2f * SAFE_ZONE_DENOMINATOR)
-
-    fun contentRadiusPx(): Float {
-        val dx = FARTHEST_X - contentCenterX()
-        val dy = FARTHEST_Y - contentCenterY()
-        return sqrt(dx * dx + dy * dy)
-    }
-
-    /** Icon pixels per source pixel. Below 1, so the squirrel is scaled down, not stretched. */
-    fun scale(): Float = safeRadiusPx() / contentRadiusPx()
-}
 
 /**
  * Latches once the in-app still, the G4 wordmark, and the slogan have each been

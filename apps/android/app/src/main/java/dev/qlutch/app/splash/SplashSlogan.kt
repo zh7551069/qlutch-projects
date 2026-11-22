@@ -84,27 +84,67 @@ internal fun createSloganView(context: Context): TextView {
 }
 
 /**
- * Places [view] from [SplashLayout.sloganInFrame]. The slot is the wordmark
- * width, the glyphs are centered in it, and the ink top is the fixed gap
- * under the wordmark. Playback time is not an input.
+ * Slogan slot shared by the TextView and the launch artwork.
+ * [viewTop] is the text layout top: one fixed gap under the wordmark, shifted
+ * up by the font's extra ascent so the ink, not the em box, sits on
+ * [SplashLayout.sloganInFrame]'s top. Playback time is not an input.
+ */
+internal data class SloganDrawPlacement(
+    val slotLeft: Float,
+    val slotTop: Float,
+    val slotWidth: Float,
+    val fontSizePx: Float,
+    val insetPx: Float,
+    val viewTop: Float,
+)
+
+internal fun sloganDrawPlacement(
+    frameWidth: Float,
+    frameHeight: Float,
+    measuredTextWidth: (fontSizePx: Float) -> Float,
+    inkInsetPx: (fontSizePx: Float) -> Float,
+): SloganDrawPlacement {
+    val slogan = SplashLayout.sloganInFrame(frameWidth, frameHeight)
+    val measured = measuredTextWidth(slogan.fontSize)
+    val fitted = fittedSloganFontSize(slogan.fontSize, measured, slogan.width)
+    val inset = inkInsetPx(fitted)
+    return SloganDrawPlacement(
+        slotLeft = slogan.left,
+        slotTop = slogan.top,
+        slotWidth = slogan.width,
+        fontSizePx = fitted,
+        insetPx = inset,
+        viewTop = slogan.top - inset,
+    )
+}
+
+/**
+ * Places [view] from [sloganDrawPlacement]. The slot is the wordmark width,
+ * the glyphs are centered in it, and the ink top is the fixed gap under the
+ * wordmark. Playback time is not an input.
  */
 internal fun layoutSplashSlogan(view: TextView, frameWidth: Int, frameHeight: Int) {
     if (frameWidth <= 0 || frameHeight <= 0) {
         view.layout(0, 0, 0, 0)
         return
     }
-    val slogan = SplashLayout.sloganInFrame(frameWidth.toFloat(), frameHeight.toFloat())
     val text = view.text?.toString().orEmpty()
-    view.setTextSize(TypedValue.COMPLEX_UNIT_PX, slogan.fontSize)
-    val measured = view.paint.measureText(text)
-    val fitted = fittedSloganFontSize(slogan.fontSize, measured, slogan.width)
-    if (fitted != slogan.fontSize) {
-        view.setTextSize(TypedValue.COMPLEX_UNIT_PX, fitted)
-    }
-    val inset = sloganInkInsetPx(view.paint, text)
-    val slotWidth = slogan.width.roundToInt().coerceAtLeast(0)
-    val left = slogan.left.roundToInt()
-    val top = (slogan.top - inset).roundToInt()
+    val placement = sloganDrawPlacement(
+        frameWidth.toFloat(),
+        frameHeight.toFloat(),
+        measuredTextWidth = { fontSizePx ->
+            view.setTextSize(TypedValue.COMPLEX_UNIT_PX, fontSizePx)
+            view.paint.measureText(text)
+        },
+        inkInsetPx = { fontSizePx ->
+            view.setTextSize(TypedValue.COMPLEX_UNIT_PX, fontSizePx)
+            sloganInkInsetPx(view.paint, text)
+        },
+    )
+    view.setTextSize(TypedValue.COMPLEX_UNIT_PX, placement.fontSizePx)
+    val slotWidth = placement.slotWidth.roundToInt().coerceAtLeast(0)
+    val left = placement.slotLeft.roundToInt()
+    val top = placement.viewTop.roundToInt()
     view.measure(
         View.MeasureSpec.makeMeasureSpec(slotWidth, View.MeasureSpec.EXACTLY),
         View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
