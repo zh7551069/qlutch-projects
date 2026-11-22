@@ -4,19 +4,28 @@
 
     <!--
       What the user sees on the icon tap, before this activity draws.
-      The Android 12+ icon is a circle, so it is a square crop of the first frame
-      with the squirrel inside the adaptive safe zone, not the raw 9:16 frame.
-      The icon background matches the splash color, which makes the system enlarge
-      the icon and skip the contrasting disc. icon_preferred keeps Android 13+ from
-      dropping that icon and showing a plain color. Pre-12 uses the window background.
+      Android 12+ draws the starting window itself: one opaque color, plus an
+      icon masked to a circle (160dp or 192dp). That circle cannot hold the
+      2/3-width 9:16 still with the wordmark and slogan, and a cropped squirrel
+      there is a different size from the in-app frame, so the icon is a flat
+      plate of the splash color. The activity then draws the real frame.
+      Pre-12 uses the window background, which is the same flat color: a custom
+      drawable class cannot run in the system process, and a fixed-dp bitmap
+      would be the wrong size on any screen that is not 375dp wide.
+      Edge to edge so that window and the in-app stage share one size.
     -->
     <style name="Theme.Qlutch.Splash" parent="Theme.Qlutch">
         <item name="android:windowBackground">@drawable/splash_window_background</item>
+        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar" tools:targetApi="27">true</item>
+        <item name="android:enforceStatusBarContrast" tools:targetApi="29">false</item>
+        <item name="android:enforceNavigationBarContrast" tools:targetApi="29">false</item>
         <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
         <item name="android:windowSplashScreenBackground" tools:targetApi="31">@color/splash_background</item>
-        <item name="android:windowSplashScreenAnimatedIcon" tools:targetApi="31">@drawable/splash_system_icon</item>
-        <item name="android:windowSplashScreenIconBackgroundColor" tools:targetApi="31">@color/splash_background</item>
+        <item name="android:windowSplashScreenAnimatedIcon" tools:targetApi="31">@drawable/splash_blank_icon</item>
         <item name="android:windowSplashScreenAnimationDuration" tools:targetApi="31">0</item>
-        <item name="android:windowSplashScreenBehavior" tools:targetApi="33">icon_preferred</item>
     </style>
 </resources>

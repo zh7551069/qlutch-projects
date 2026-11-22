@@ -14,7 +14,6 @@ import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.TextView
 import dev.qlutch.app.R
-import kotlin.math.roundToInt
 
 /**
  * Plays the silent welcome clip fitted inside this view.
@@ -345,11 +344,11 @@ internal class SplashPlaybackView(context: Context) : FrameLayout(context) {
             slogan.layout(0, 0, 0, 0)
             return
         }
-        val mark = SplashLayout.wordmarkInFrame(frameWidth.toFloat(), frameHeight.toFloat())
-        val markWidth = mark.width.roundToInt().coerceAtLeast(0)
-        val markHeight = mark.height.roundToInt().coerceAtLeast(0)
-        val markLeft = mark.left.roundToInt()
-        val markTop = mark.top.roundToInt()
+        val mark = SplashLaunchGeometry.wordmarkInFramePx(frameWidth, frameHeight)
+        val markWidth = mark.width
+        val markHeight = mark.height
+        val markLeft = mark.left
+        val markTop = mark.top
         wordmark.measure(
             View.MeasureSpec.makeMeasureSpec(markWidth, View.MeasureSpec.EXACTLY),
             View.MeasureSpec.makeMeasureSpec(markHeight, View.MeasureSpec.EXACTLY),

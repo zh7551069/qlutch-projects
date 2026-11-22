@@ -23,6 +23,18 @@ class SplashActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Android 12+ has already painted a solid plate. Drop it with no scale
+        // or fade once our first frame is allowed, so the plate does not zoom
+        // into the still.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            splashScreen.setOnExitAnimationListener { splashScreenView ->
+                splashScreenView.remove()
+            }
+        }
+        // Same still, wordmark, and slogan as playback, in this window's pixels.
+        // Installed before the first draw. The theme background stays a flat
+        // color because the system process cannot run this drawable.
+        window.setBackgroundDrawable(SplashLaunchArtworkDrawable(this))
         // Before setContent, so the first traversal cannot paint an empty frame
         // under the system splash. The splash stays until the still is laid out.
         findViewById<View>(android.R.id.content).holdSplashUntilContentReady {
