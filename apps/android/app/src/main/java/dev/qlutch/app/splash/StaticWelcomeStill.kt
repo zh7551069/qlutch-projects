@@ -15,13 +15,15 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.viewinterop.AndroidView
 import dev.qlutch.app.R
 import kotlinx.coroutines.delay
 
 /**
  * Reduce-motion hold. Shows the first frame of the packed welcome clip inside the
- * same centered frame as playback, with the same fixed purple wordmark, then
- * continues after [SplashTiming.STATIC_HOLD_MILLIS] or on tap. Does not play the clip.
+ * same centered frame as playback, with the same fixed purple wordmark and
+ * slogan, then continues after [SplashTiming.STATIC_HOLD_MILLIS] or on tap.
+ * Does not play the clip.
  */
 @Composable
 internal fun StaticWelcomeStill(onContinue: () -> Unit) {
@@ -49,6 +51,10 @@ internal fun StaticWelcomeStill(onContinue: () -> Unit) {
             )
         }
         G4Wordmark()
+        AndroidView(
+            modifier = Modifier.fillMaxSize(),
+            factory = { context -> SplashSloganHost(context) },
+        )
     }
 }
 

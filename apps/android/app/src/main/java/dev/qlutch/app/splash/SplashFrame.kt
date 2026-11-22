@@ -60,6 +60,31 @@ internal object SplashLayout {
     const val WORDMARK_ASPECT_WIDTH = 941f
     const val WORDMARK_ASPECT_HEIGHT = 238f
 
+    /**
+     * Inclusive alpha bounds of the packed wordmark. The PNG is 238px tall
+     * and the ink, including the faint edge, runs from y=8 through y=229.
+     * Slogan size is a fraction of this visual height, not the clear padding.
+     */
+    const val WORDMARK_INK_TOP = 8f
+    const val WORDMARK_INK_BOTTOM = 229f
+    const val WORDMARK_INK_HEIGHT = WORDMARK_INK_BOTTOM - WORDMARK_INK_TOP + 1f
+
+    /**
+     * Gap from the wordmark box bottom to the slogan ink top, on a 375-wide
+     * design. Scaled by screenWidth/375, same as the wordmark gap. 10 sits
+     * in the 8–12dp band and lands at about 0.2–0.3 of the wordmark height.
+     */
+    const val SLOGAN_GAP_AT_375 = 10f
+
+    /** 42% of the wordmark ink height. Inside the 40%–45% band, and lighter than the mark. */
+    const val SLOGAN_SIZE_OVER_INK_HEIGHT = 0.42f
+
+    /**
+     * Advance, in ems, of the splash slogan in Noto Sans SC Medium.
+     * Ten fullwidth glyphs at 1000 units each. The line is capped to the wordmark width.
+     */
+    const val SLOGAN_ADVANCE_EMS = 10f
+
     fun frameSize(screenWidth: Float): Pair<Float, Float> {
         val width = screenWidth * WIDTH_FRACTION
         val height = width * HEIGHT_OVER_WIDTH
@@ -94,12 +119,40 @@ internal object SplashLayout {
         )
     }
 
-    /** Screen-space frame and wordmark. Same anchor as [wordmarkInFrame]. */
+    /**
+     * Slogan slot inside the centered 9:16 frame. [top] is the slogan ink top,
+     * one fixed gap under the wordmark box. There is no playback-time input,
+     * so the line stays put while the squirrel jumps. [width] is the wordmark
+     * width; the glyphs are centered in that slot and [textWidth] is not wider.
+     */
+    fun sloganInFrame(frameWidth: Float, frameHeight: Float): FrameSlogan {
+        val mark = wordmarkInFrame(frameWidth, frameHeight)
+        val screenWidth = frameWidth / WIDTH_FRACTION
+        val gap = SLOGAN_GAP_AT_375 * (screenWidth / DESIGN_WIDTH)
+        val inkHeight = mark.height * WORDMARK_INK_HEIGHT / WORDMARK_ASPECT_HEIGHT
+        var fontSize = inkHeight * SLOGAN_SIZE_OVER_INK_HEIGHT
+        var textWidth = fontSize * SLOGAN_ADVANCE_EMS
+        if (textWidth > mark.width && SLOGAN_ADVANCE_EMS > 0f) {
+            fontSize = mark.width / SLOGAN_ADVANCE_EMS
+            textWidth = mark.width
+        }
+        return FrameSlogan(
+            left = mark.left,
+            top = mark.top + mark.height + gap,
+            width = mark.width,
+            fontSize = fontSize,
+            textWidth = textWidth,
+            gap = gap,
+        )
+    }
+
+    /** Screen-space frame, wordmark, and slogan. Same anchors as the frame helpers. */
     fun placement(screenWidth: Float, screenHeight: Float): SplashPlacement {
         val (frameWidth, frameHeight) = frameSize(screenWidth)
         val frameLeft = (screenWidth - frameWidth) / 2f
         val frameTop = (screenHeight - frameHeight) / 2f
         val mark = wordmarkInFrame(frameWidth, frameHeight)
+        val slogan = sloganInFrame(frameWidth, frameHeight)
         return SplashPlacement(
             frameLeft = frameLeft,
             frameTop = frameTop,
@@ -111,6 +164,12 @@ internal object SplashLayout {
             wordmarkHeight = mark.height,
             shadowBottom = frameTop + mark.shadowBottom,
             wordmarkGap = mark.gap,
+            sloganLeft = frameLeft + slogan.left,
+            sloganTop = frameTop + slogan.top,
+            sloganWidth = slogan.width,
+            sloganTextWidth = slogan.textWidth,
+            sloganFontSize = slogan.fontSize,
+            sloganGap = slogan.gap,
         )
     }
 }
@@ -121,6 +180,15 @@ internal data class FrameWordmark(
     val width: Float,
     val height: Float,
     val shadowBottom: Float,
+    val gap: Float,
+)
+
+internal data class FrameSlogan(
+    val left: Float,
+    val top: Float,
+    val width: Float,
+    val fontSize: Float,
+    val textWidth: Float,
     val gap: Float,
 )
 
@@ -135,6 +203,12 @@ internal data class SplashPlacement(
     val wordmarkHeight: Float,
     val shadowBottom: Float,
     val wordmarkGap: Float,
+    val sloganLeft: Float,
+    val sloganTop: Float,
+    val sloganWidth: Float,
+    val sloganTextWidth: Float,
+    val sloganFontSize: Float,
+    val sloganGap: Float,
 )
 
 /**

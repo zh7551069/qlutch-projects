@@ -12,6 +12,7 @@ import android.view.TextureView
 import android.view.View
 import android.widget.FrameLayout
 import android.widget.ImageView
+import android.widget.TextView
 import dev.qlutch.app.R
 import kotlin.math.roundToInt
 
@@ -186,9 +187,9 @@ internal class SplashVideoView(context: Context) : TextureView(context), Texture
 }
 
 /**
- * Centered welcome clip with the G4 wordmark drawn after the texture.
- * The mark is laid out from the landing shadow, not from the player position,
- * so it stays put when the squirrel jumps. It is not part of the mp4.
+ * Centered welcome clip with the G4 wordmark and the slogan drawn after the texture.
+ * Both are laid out from the landing shadow, not from the player position,
+ * so they stay put when the squirrel jumps. Neither is part of the mp4.
  */
 internal class SplashPlaybackView(context: Context) : FrameLayout(context) {
     val video: SplashVideoView = SplashVideoView(context)
@@ -204,6 +205,7 @@ internal class SplashPlaybackView(context: Context) : FrameLayout(context) {
         isFocusable = false
         isFocusableInTouchMode = false
     }
+    private val slogan: TextView = createSloganView(context)
 
     init {
         importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
@@ -215,6 +217,10 @@ internal class SplashPlaybackView(context: Context) : FrameLayout(context) {
             wordmark,
             LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT),
         )
+        addView(
+            slogan,
+            LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT),
+        )
     }
 
     override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
@@ -223,6 +229,7 @@ internal class SplashPlaybackView(context: Context) : FrameLayout(context) {
         video.layout(0, 0, frameWidth, frameHeight)
         if (frameWidth <= 0 || frameHeight <= 0) {
             wordmark.layout(0, 0, 0, 0)
+            slogan.layout(0, 0, 0, 0)
             return
         }
         val mark = SplashLayout.wordmarkInFrame(frameWidth.toFloat(), frameHeight.toFloat())
@@ -235,6 +242,7 @@ internal class SplashPlaybackView(context: Context) : FrameLayout(context) {
             View.MeasureSpec.makeMeasureSpec(markHeight, View.MeasureSpec.EXACTLY),
         )
         wordmark.layout(markLeft, markTop, markLeft + markWidth, markTop + markHeight)
+        layoutSplashSlogan(slogan, frameWidth, frameHeight)
     }
 }
 

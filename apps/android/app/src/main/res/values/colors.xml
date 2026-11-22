@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="ic_launcher_background">#145C4A</color>
+    <color name="ic_launcher_background">#F2F5F7</color>
     <color name="canvas">#F6F8FF</color>
     <color name="splash_background">#F2F5F7</color>
+    <color name="splash_brand">#6C5CE7</color>
     <color name="ink">#20244A</color>
     <color name="spark">#FF6B4A</color>
 </resources>

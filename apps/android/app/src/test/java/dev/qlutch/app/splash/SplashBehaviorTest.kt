@@ -72,7 +72,8 @@ class SplashBehaviorTest {
         val strings = moduleFile("src/main/res/values/strings.xml").readText()
         assertTrue(strings.contains("<string name=\"splash_wordmark\">Qlutch</string>"))
         assertTrue(strings.contains("<string name=\"splash_wordmark_period\">\u3002</string>"))
-        assertTrue(strings.contains("<string name=\"splash_slogan\">让记知识，变得轻松有趣</string>"))
+        assertTrue(strings.contains("<string name=\"splash_slogan\">让记知识，更轻松有趣</string>"))
+        assertFalse(strings.contains("变得轻松有趣"))
         assertFalse(strings.contains("把课件或教材"))
         assertFalse(strings.contains("好玩"))
         assertFalse(strings.contains("Gizmo"))
@@ -96,11 +97,11 @@ class SplashBehaviorTest {
     }
 
     @Test
-    fun packedWelcomeClipBytesAreTheV4File() {
+    fun packedWelcomeClipBytesAreTheCleanEdgeV4File() {
         val file = moduleFile("src/main/res/raw/splash.mp4")
         val bytes = file.readBytes()
-        assertEquals(849742, bytes.size)
-        assertEquals("41f48c6521c33b0d04e64f3925751225796597fff713e2208ba39d59136c468a", sha256(bytes))
+        assertEquals(768507, bytes.size)
+        assertEquals("b6d02b58cbf8ff491ca063112e24c6a38f406f80516d03c762ad97abf7e3b610", sha256(bytes))
         assertTrue(bytes.containsSequence("vide".encodeToByteArray()))
         assertFalse(bytes.containsSequence("soun".encodeToByteArray()))
     }
@@ -196,11 +197,15 @@ class SplashBehaviorTest {
             "SplashActivity.kt",
             "SplashFrame.kt",
             "SplashVideoView.kt",
+            "SplashSlogan.kt",
         ).joinToString("\n") { name ->
             File(splashDir, name).readText()
         }
-        assertFalse(shown.contains("splash_slogan"))
-        assertFalse(shown.contains("让记知识"))
+        assertTrue(shown.contains("splash_slogan"))
+        assertTrue(shown.contains("splash_brand"))
+        assertTrue(shown.contains("sloganInFrame"))
+        assertTrue(shown.contains("layoutSplashSlogan"))
+        assertFalse(shown.contains("变得轻松有趣"))
         assertFalse(shown.contains("coverScale"))
         assertFalse(shown.contains("setColorFilter"))
         assertFalse(shown.contains("colorFilter"))
@@ -230,15 +235,186 @@ class SplashBehaviorTest {
         val video = File(splashDir, "SplashVideoView.kt").readText()
         val frame = File(splashDir, "SplashFrame.kt").readText()
         assertTrue(still.contains("G4Wordmark()"))
+        assertTrue(still.contains("SplashSloganHost"))
         assertFalse(playback.contains("G4Wordmark"))
         assertTrue(playback.contains("SplashPlaybackView"))
         assertTrue(frame.contains("fun G4Wordmark"))
+        assertTrue(frame.contains("fun sloganInFrame"))
         assertTrue(frame.contains("R.drawable.splash_g4_wordmark"))
         assertTrue(video.contains("R.drawable.splash_g4_wordmark"))
         assertTrue(video.contains("wordmarkInFrame"))
+        assertTrue(video.contains("layoutSplashSlogan"))
         assertTrue(video.indexOf("addView(\n            video") < video.indexOf("addView(\n            wordmark"))
-        assertFalse(video.contains("splash_slogan"))
-        assertFalse(frame.contains("splash_slogan"))
+        assertTrue(video.indexOf("addView(\n            wordmark") < video.indexOf("addView(\n            slogan"))
+        val slogan = File(splashDir, "SplashSlogan.kt").readText()
+        assertTrue(slogan.contains("R.string.splash_slogan"))
+        assertTrue(slogan.contains("R.color.splash_brand"))
+        assertTrue(slogan.contains("R.font.noto_sans_sc_medium"))
+        assertTrue(slogan.contains("PingFang"))
+        assertTrue(slogan.contains("fun layoutSplashSlogan"))
+        assertTrue(slogan.contains("class SplashSloganHost"))
+    }
+
+    @Test
+    fun sloganStaysUnderTheFixedWordmarkAndFitsItsWidth() {
+        assertEquals(8f, SplashLayout.WORDMARK_INK_TOP, 0f)
+        assertEquals(229f, SplashLayout.WORDMARK_INK_BOTTOM, 0f)
+        assertEquals(222f, SplashLayout.WORDMARK_INK_HEIGHT, 0f)
+        assertEquals(10f, SplashLayout.SLOGAN_GAP_AT_375, 0f)
+        assertTrue(SplashLayout.SLOGAN_GAP_AT_375 in 8f..12f)
+        assertTrue(SplashLayout.SLOGAN_SIZE_OVER_INK_HEIGHT in 0.40f..0.45f)
+        assertEquals(2f / 3f, SplashLayout.WIDTH_FRACTION, 0f)
+
+        val wordmark = decodePng(moduleFile("src/main/res/drawable-nodpi/splash_g4_wordmark.png").readBytes())
+        var inkTop = wordmark.height
+        var inkBottom = 0
+        for (y in 0 until wordmark.height) {
+            for (x in 0 until wordmark.width) {
+                if (wordmark.alpha(x, y) == 0) continue
+                if (y < inkTop) inkTop = y
+                if (y > inkBottom) inkBottom = y
+            }
+        }
+        assertEquals(SplashLayout.WORDMARK_INK_TOP, inkTop.toFloat(), 0f)
+        assertEquals(SplashLayout.WORDMARK_INK_BOTTOM, inkBottom.toFloat(), 0f)
+
+        val design = SplashLayout.placement(375f, 812f)
+        assertEquals(10f, design.sloganGap, 0.001f)
+        assertEquals(design.wordmarkLeft, design.sloganLeft, 0.001f)
+        assertEquals(design.wordmarkWidth, design.sloganWidth, 0.001f)
+        assertEquals(design.wordmarkTop + design.wordmarkHeight + design.sloganGap, design.sloganTop, 0.001f)
+        assertTrue(design.sloganGap / design.wordmarkHeight in 0.20f..0.30f)
+        val designInk = design.wordmarkHeight * SplashLayout.WORDMARK_INK_HEIGHT / SplashLayout.WORDMARK_ASPECT_HEIGHT
+        assertEquals(SplashLayout.SLOGAN_SIZE_OVER_INK_HEIGHT, design.sloganFontSize / designInk, 0.001f)
+        assertTrue(design.sloganTextWidth <= design.sloganWidth + 0.001f)
+        assertEquals(
+            design.wordmarkLeft + design.wordmarkWidth / 2f,
+            design.sloganLeft + design.sloganWidth / 2f,
+            0.001f,
+        )
+
+        val phone = SplashLayout.placement(1080f, 2340f)
+        assertEquals(720f, phone.frameWidth, 0.001f)
+        assertEquals(180f, phone.frameLeft, 0.001f)
+        assertEquals((1080f - 720f) / 2f, phone.frameLeft, 0.001f)
+        assertEquals((2340f - 1280f) / 2f, phone.frameTop, 0.001f)
+        assertEquals(10f * 1080f / 375f, phone.sloganGap, 0.01f)
+        assertEquals(phone.wordmarkTop + phone.wordmarkHeight + phone.sloganGap, phone.sloganTop, 0.01f)
+        assertTrue(phone.sloganTop > phone.wordmarkTop + phone.wordmarkHeight)
+        val phoneInk = phone.wordmarkHeight * SplashLayout.WORDMARK_INK_HEIGHT / SplashLayout.WORDMARK_ASPECT_HEIGHT
+        assertTrue(phone.sloganFontSize / phoneInk in 0.40f..0.45f)
+        assertTrue(phone.sloganTextWidth <= phone.wordmarkWidth + 0.001f)
+        assertEquals(phone.sloganFontSize * SplashLayout.SLOGAN_ADVANCE_EMS, phone.sloganTextWidth, 0.001f)
+        val local = SplashLayout.sloganInFrame(phone.frameWidth, phone.frameHeight)
+        assertEquals(phone.sloganTop, phone.frameTop + local.top, 0.001f)
+        assertEquals(phone.sloganLeft, phone.frameLeft + local.left, 0.001f)
+        assertEquals(phone, SplashLayout.placement(1080f, 2340f))
+
+        listOf(360f to 780f, 393f to 852f, 411f to 891f).forEach { (width, height) ->
+            val sized = SplashLayout.placement(width, height)
+            assertEquals(width * 2f / 3f, sized.frameWidth, 0.05f)
+            assertEquals(
+                SplashLayout.SLOGAN_GAP_AT_375 * (width / SplashLayout.DESIGN_WIDTH),
+                sized.sloganGap,
+                0.01f,
+            )
+            assertTrue(sized.sloganGap / sized.wordmarkHeight in 0.20f..0.30f)
+            val ink = sized.wordmarkHeight * SplashLayout.WORDMARK_INK_HEIGHT / SplashLayout.WORDMARK_ASPECT_HEIGHT
+            assertTrue(sized.sloganFontSize / ink in 0.40f..0.45f)
+            assertTrue(sized.sloganTextWidth <= sized.wordmarkWidth + 0.01f)
+            assertEquals(sized.wordmarkLeft, sized.sloganLeft, 0.01f)
+            assertTrue(sized.sloganTop > sized.shadowBottom)
+        }
+
+        assertEquals(10f, fittedSloganFontSize(preferred = 10f, measuredWidth = 8f, maxWidth = 12f), 0f)
+        assertEquals(10f, fittedSloganFontSize(preferred = 10f, measuredWidth = 10f, maxWidth = 12f), 0f)
+        assertEquals(6f, fittedSloganFontSize(preferred = 12f, measuredWidth = 20f, maxWidth = 10f), 0.001f)
+
+        assertEquals(
+            SloganTypefaceSource.PINGFANG_SC_MEDIUM,
+            chooseSloganTypefaceSource(pingFangMediumAvailable = true),
+        )
+        assertEquals(
+            SloganTypefaceSource.BUNDLED_NOTO_SANS_SC_MEDIUM,
+            chooseSloganTypefaceSource(pingFangMediumAvailable = false),
+        )
+
+        val colors = moduleFile("src/main/res/values/colors.xml").readText()
+        assertTrue(colors.contains("<color name=\"splash_brand\">#6C5CE7</color>"))
+        val font = moduleFile("src/main/res/font/noto_sans_sc_medium.ttf").readBytes()
+        assertEquals(4608, font.size)
+        assertEquals("25ca7ae4b4919637b77ffdf9756b868ec3b2af20e41cce87b4b49f8541d769e5", sha256(font))
+    }
+
+    @Test
+    fun launcherIconIsTheClawEdgePreview() {
+        val colors = moduleFile("src/main/res/values/colors.xml").readText()
+        assertTrue(colors.contains("<color name=\"ic_launcher_background\">#F2F5F7</color>"))
+        val adaptive = moduleFile("src/main/res/mipmap-anydpi-v26/ic_launcher.xml").readText()
+        val round = moduleFile("src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml").readText()
+        assertTrue(adaptive.contains("@color/ic_launcher_background"))
+        assertTrue(adaptive.contains("@drawable/ic_launcher_foreground"))
+        assertTrue(round.contains("@drawable/ic_launcher_foreground"))
+        assertTrue(moduleFileIfExists("src/main/res/drawable/ic_launcher_foreground.xml") == null)
+
+        val legacy = mapOf(
+            "mipmap-mdpi" to 48,
+            "mipmap-hdpi" to 72,
+            "mipmap-xhdpi" to 96,
+            "mipmap-xxhdpi" to 144,
+            "mipmap-xxxhdpi" to 192,
+        )
+        val legacyHashes = mapOf(
+            "mipmap-mdpi" to "90c708072dbee5cedadc26e014834b4821737680c94d1971a8a03dae5439edff",
+            "mipmap-hdpi" to "3c8d49cc73308ab138c12b8ec069c406dcbe782b203b7a9298976aaf574a0d9a",
+            "mipmap-xhdpi" to "86521455fa5cec08469de7683db58ca03d124b4f49aeb505e272950fc9869049",
+            "mipmap-xxhdpi" to "1d80bcec9a6fae0876e9b534289bf19a87deee7093e442b2f1521f2d5bea11dc",
+            "mipmap-xxxhdpi" to "dbd6c1c4adff488b2a3f001a68b5a6acacb0862015e0c099f7202e455c27d577",
+        )
+        legacy.forEach { (dir, size) ->
+            val launcher = moduleFile("src/main/res/$dir/ic_launcher.png").readBytes()
+            val roundIcon = moduleFile("src/main/res/$dir/ic_launcher_round.png").readBytes()
+            assertEquals(launcherHashes(legacyHashes, dir), sha256(launcher))
+            assertEquals(sha256(launcher), sha256(roundIcon))
+            val image = decodePng(launcher)
+            assertEquals(size, image.width)
+            assertEquals(size, image.height)
+            assertTrue(image.red(image.width / 2, image.height / 2) < 80)
+        }
+
+        val foreground = mapOf(
+            "drawable-mdpi" to 108,
+            "drawable-hdpi" to 162,
+            "drawable-xhdpi" to 216,
+            "drawable-xxhdpi" to 324,
+            "drawable-xxxhdpi" to 432,
+        )
+        val foregroundHashes = mapOf(
+            "drawable-mdpi" to "d5f03c9bc45f71e02241c0d768384f71443f064cad9c625f4203ac1e4f9e8c55",
+            "drawable-hdpi" to "7991350d6bf111465eec180b5d4030eeb75bdd052b8bbd64c5b0cb013d498a58",
+            "drawable-xhdpi" to "ae5dd178226c464d9dd6cde56739860cb4c5e78a3ae9756625b08e3a22b251d2",
+            "drawable-xxhdpi" to "b8f140cabf9558f6d8289ebdab5f0063b2fc30c293940b4236fbb1a74fdf1e22",
+            "drawable-xxxhdpi" to "2612054b18c53498c6febf40df21d9de2be8ab7474c2424e5338ef8f2cbe182a",
+        )
+        foreground.forEach { (dir, size) ->
+            val bytes = moduleFile("src/main/res/$dir/ic_launcher_foreground.png").readBytes()
+            assertEquals(foregroundHashes.getValue(dir), sha256(bytes))
+            val image = decodePng(bytes)
+            assertEquals(size, image.width)
+            assertEquals(size, image.height)
+            listOf(0 to 0, image.width - 1 to 0, 0 to image.height - 1, image.width - 1 to image.height - 1)
+                .forEach { (x, y) ->
+                    assertEquals(0xF2, image.red(x, y), 8)
+                    assertEquals(0xF5, image.green(x, y), 8)
+                    assertEquals(0xF7, image.blue(x, y), 8)
+                }
+        }
+    }
+
+    private fun launcherHashes(hashes: Map<String, String>, dir: String): String = hashes.getValue(dir)
+
+    private fun assertEquals(expected: Int, actual: Int, tolerance: Int) {
+        assertTrue("expected $expected ±$tolerance but was $actual", kotlin.math.abs(expected - actual) <= tolerance)
     }
 
     private fun ByteArray.containsSequence(needle: ByteArray): Boolean {
@@ -389,6 +565,11 @@ class SplashBehaviorTest {
     }
 
     private fun moduleFile(relative: String): File {
+        return moduleFileIfExists(relative)
+            ?: error("Missing $relative from ${File(System.getProperty("user.dir") ?: ".").absolutePath}")
+    }
+
+    private fun moduleFileIfExists(relative: String): File? {
         val cwd = File(System.getProperty("user.dir") ?: ".")
         val candidates = listOf(
             File(cwd, relative),
@@ -396,6 +577,5 @@ class SplashBehaviorTest {
             File(cwd, "apps/android/app/$relative"),
         )
         return candidates.firstOrNull { it.exists() }
-            ?: error("Missing $relative from ${cwd.absolutePath}")
     }
 }
