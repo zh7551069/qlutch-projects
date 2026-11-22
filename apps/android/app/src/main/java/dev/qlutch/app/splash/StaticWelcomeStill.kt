@@ -20,8 +20,8 @@ import kotlinx.coroutines.delay
 
 /**
  * Reduce-motion hold. Shows the first frame of the packed welcome clip inside the
- * same centered frame as playback, then continues after [SplashTiming.STATIC_HOLD_MILLIS]
- * or on tap. Does not play the clip.
+ * same centered frame as playback, with the same fixed purple wordmark, then
+ * continues after [SplashTiming.STATIC_HOLD_MILLIS] or on tap. Does not play the clip.
  */
 @Composable
 internal fun StaticWelcomeStill(onContinue: () -> Unit) {
@@ -48,6 +48,7 @@ internal fun StaticWelcomeStill(onContinue: () -> Unit) {
                 contentScale = ContentScale.Fit,
             )
         }
+        G4Wordmark()
     }
 }
 

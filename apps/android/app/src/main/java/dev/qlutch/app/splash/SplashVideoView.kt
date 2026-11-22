@@ -6,10 +6,14 @@ import android.graphics.SurfaceTexture
 import android.media.MediaPlayer
 import android.os.Handler
 import android.os.Looper
+import android.view.MotionEvent
 import android.view.Surface
 import android.view.TextureView
 import android.view.View
+import android.widget.FrameLayout
+import android.widget.ImageView
 import dev.qlutch.app.R
+import kotlin.math.roundToInt
 
 /**
  * Plays the silent welcome clip fitted inside this view.
@@ -179,4 +183,61 @@ internal class SplashVideoView(context: Context) : TextureView(context), Texture
         val callback = onFinished
         mainHandler.post { callback?.invoke() }
     }
+}
+
+/**
+ * Centered welcome clip with the G4 wordmark drawn after the texture.
+ * The mark is laid out from the landing shadow, not from the player position,
+ * so it stays put when the squirrel jumps. It is not part of the mp4.
+ */
+internal class SplashPlaybackView(context: Context) : FrameLayout(context) {
+    val video: SplashVideoView = SplashVideoView(context)
+    private val wordmark: ImageView = PassThroughImageView(context).apply {
+        setImageResource(R.drawable.splash_g4_wordmark)
+        scaleType = ImageView.ScaleType.FIT_CENTER
+        imageTintList = null
+        setBackgroundColor(android.graphics.Color.TRANSPARENT)
+        contentDescription = context.getString(R.string.splash_wordmark) +
+            context.getString(R.string.splash_wordmark_period)
+        importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_YES
+        isClickable = false
+        isFocusable = false
+        isFocusableInTouchMode = false
+    }
+
+    init {
+        importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        addView(
+            video,
+            LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT),
+        )
+        addView(
+            wordmark,
+            LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT),
+        )
+    }
+
+    override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
+        val frameWidth = right - left
+        val frameHeight = bottom - top
+        video.layout(0, 0, frameWidth, frameHeight)
+        if (frameWidth <= 0 || frameHeight <= 0) {
+            wordmark.layout(0, 0, 0, 0)
+            return
+        }
+        val mark = SplashLayout.wordmarkInFrame(frameWidth.toFloat(), frameHeight.toFloat())
+        val markWidth = mark.width.roundToInt().coerceAtLeast(0)
+        val markHeight = mark.height.roundToInt().coerceAtLeast(0)
+        val markLeft = mark.left.roundToInt()
+        val markTop = mark.top.roundToInt()
+        wordmark.measure(
+            View.MeasureSpec.makeMeasureSpec(markWidth, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(markHeight, View.MeasureSpec.EXACTLY),
+        )
+        wordmark.layout(markLeft, markTop, markLeft + markWidth, markTop + markHeight)
+    }
+}
+
+private class PassThroughImageView(context: Context) : ImageView(context) {
+    override fun onTouchEvent(event: MotionEvent): Boolean = false
 }

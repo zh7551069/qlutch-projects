@@ -36,13 +36,13 @@ internal fun ColdStartVideo(onFinished: () -> Unit) {
         AndroidView(
             modifier = Modifier.fillMaxSize(),
             factory = { context ->
-                SplashVideoView(context).apply {
-                    this.onFinished = onFinished
-                    startPlayback()
-                    videoView.value = this
+                SplashPlaybackView(context).apply {
+                    video.onFinished = onFinished
+                    video.startPlayback()
+                    videoView.value = video
                 }
             },
-            onRelease = { it.releasePlayer() },
+            onRelease = { it.video.releasePlayer() },
         )
     }
 }
