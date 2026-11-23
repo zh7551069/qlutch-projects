@@ -2,6 +2,7 @@
 <resources>
     <color name="ic_launcher_background">#F2F5F7</color>
     <color name="canvas">#F6F8FF</color>
+    <color name="page_background">#F2F5F7</color>
     <color name="splash_background">#F2F5F7</color>
     <color name="splash_brand">#6C5CE7</color>
     <color name="ink">#20244A</color>
