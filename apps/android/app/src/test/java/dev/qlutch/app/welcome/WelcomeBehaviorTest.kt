@@ -14,8 +14,9 @@ class WelcomeBehaviorTest {
         assertEquals(390, WelcomeLayout.ARTBOARD_WIDTH_DP)
         assertEquals(844, WelcomeLayout.ARTBOARD_HEIGHT_DP)
         assertEquals(0xFFF2F5F7, WelcomeLayout.CANVAS)
-        // Bridge export stays at gap 20. This preview tightens both content gaps to 12 and shifts the group up 24.
-        assertEquals(12, WelcomeLayout.CONTENT_GAP_DP)
+        // Bridge export stays at gap 20. Slot-to-wordmark is 0, wordmark-to-tagline stays 12, group still shifts up 24.
+        assertEquals(0, WelcomeLayout.SLOT_TO_WORDMARK_GAP_DP)
+        assertEquals(12, WelcomeLayout.WORDMARK_TO_TAGLINE_GAP_DP)
         assertEquals(24, WelcomeLayout.CONTENT_GROUP_SHIFT_UP_DP)
         assertEquals(16, WelcomeLayout.CONTENT_PADDING_HORIZONTAL_DP)
         assertEquals(24, WelcomeLayout.CONTENT_PADDING_TOP_DP)
@@ -105,7 +106,19 @@ class WelcomeBehaviorTest {
         val screen = welcomeSource("WelcomeScreen.kt") + "\n" + welcomeSource("WelcomeCheer.kt")
         assertTrue(screen.contains("Color(WelcomeLayout.CANVAS)"))
         assertTrue(screen.contains("WelcomeLayout.ARTBOARD_WIDTH_DP"))
-        assertTrue(screen.contains("WelcomeLayout.CONTENT_GAP_DP"))
+        assertTrue(screen.contains("WelcomeLayout.SLOT_TO_WORDMARK_GAP_DP"))
+        assertTrue(screen.contains("WelcomeLayout.WORDMARK_TO_TAGLINE_GAP_DP"))
+        assertFalse(screen.contains("CONTENT_GAP_DP"))
+        val welcomeScreen = welcomeSource("WelcomeScreen.kt")
+        val slotGap = welcomeScreen.indexOf("WelcomeLayout.SLOT_TO_WORDMARK_GAP_DP")
+        val centered = welcomeScreen.indexOf("Alignment.CenterVertically")
+        val taglineGap = welcomeScreen.indexOf("WelcomeLayout.WORDMARK_TO_TAGLINE_GAP_DP")
+        assertTrue(slotGap >= 0)
+        assertTrue(centered > slotGap)
+        assertTrue(taglineGap > centered)
+        val slotArrangement = welcomeScreen.substring(slotGap, taglineGap)
+        assertTrue(slotArrangement.contains("Alignment.CenterVertically"))
+        assertFalse(slotArrangement.contains("WORDMARK_TO_TAGLINE_GAP_DP"))
         assertTrue(screen.contains("WelcomeLayout.CONTENT_GROUP_SHIFT_UP_DP"))
         assertTrue(screen.contains("offset(y = (-WelcomeLayout.CONTENT_GROUP_SHIFT_UP_DP).dp)"))
         assertTrue(screen.contains("WelcomeLayout.CONTENT_PADDING_HORIZONTAL_DP"))
@@ -381,7 +394,7 @@ class WelcomeBehaviorTest {
 
         val gradle = moduleFile("build.gradle.kts").readText()
         assertTrue(gradle.contains("versionName = \"0.0.0\""))
-        assertTrue(gradle.contains("versionCode = 4"))
+        assertTrue(gradle.contains("versionCode = 5"))
     }
 
     private fun assertDisplays(file: File, text: String) {

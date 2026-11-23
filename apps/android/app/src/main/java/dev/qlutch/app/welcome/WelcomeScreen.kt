@@ -66,7 +66,7 @@ internal fun WelcomeScreen() {
                     .offset(y = (-WelcomeLayout.CONTENT_GROUP_SHIFT_UP_DP).dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(
-                    WelcomeLayout.CONTENT_GAP_DP.dp,
+                    WelcomeLayout.SLOT_TO_WORDMARK_GAP_DP.dp,
                     Alignment.CenterVertically,
                 ),
             ) {
@@ -76,15 +76,22 @@ internal fun WelcomeScreen() {
                         .fillMaxWidth()
                         .height(WelcomeLayout.SLOT_HEIGHT_DP.dp),
                 )
-                Wordmark()
-                CopyText(
-                    text = stringResource(R.string.welcome_tagline),
-                    widthDp = WelcomeLayout.TAGLINE_WIDTH_DP,
-                    sizeSp = WelcomeLayout.TAGLINE_SIZE_SP,
-                    color = WelcomeLayout.TAGLINE_COLOR,
-                    fontFamily = WelcomeType.notoSemiBold,
-                    fontWeight = FontWeight.SemiBold,
-                )
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(
+                        WelcomeLayout.WORDMARK_TO_TAGLINE_GAP_DP.dp,
+                    ),
+                ) {
+                    Wordmark()
+                    CopyText(
+                        text = stringResource(R.string.welcome_tagline),
+                        widthDp = WelcomeLayout.TAGLINE_WIDTH_DP,
+                        sizeSp = WelcomeLayout.TAGLINE_SIZE_SP,
+                        color = WelcomeLayout.TAGLINE_COLOR,
+                        fontFamily = WelcomeType.notoSemiBold,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
             }
             Column(
                 modifier = Modifier

@@ -9,8 +9,11 @@ internal object WelcomeLayout {
     const val ARTBOARD_HEIGHT_DP = 844
     const val CANVAS = 0xFFF2F5F7
 
-    /** Bridge export gap is 20. This preview tightens slot-to-wordmark and wordmark-to-tagline by 8. */
-    const val CONTENT_GAP_DP = 12
+    /** Gap between the cheer slot and the wordmark. This preview sets it to 0. */
+    const val SLOT_TO_WORDMARK_GAP_DP = 0
+
+    /** Gap between the wordmark and the tagline. Bridge export is 20; this preview keeps 12. */
+    const val WORDMARK_TO_TAGLINE_GAP_DP = 12
     const val CONTENT_PADDING_HORIZONTAL_DP = 16
     const val CONTENT_PADDING_TOP_DP = 24
     /** Moves the centered slot + wordmark + tagline group up from the content area's vertical center. */
