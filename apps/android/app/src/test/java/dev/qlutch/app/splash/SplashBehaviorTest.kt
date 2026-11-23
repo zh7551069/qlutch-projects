@@ -158,7 +158,8 @@ class SplashBehaviorTest {
                 "override fun handleOnBackPressed() {\n                    openNext()\n                }",
             ),
         )
-        assertTrue(activity.contains("MainActivity::class.java"))
+        assertTrue(activity.contains("WelcomeActivity::class.java"))
+        assertFalse(activity.contains("MainActivity::class.java"))
         assertFalse(activity.contains("POST_COMPLETION_HOLD_MILLIS"))
         assertFalse(activity.contains("postDelayed"))
         assertFalse(activity.contains("delay("))

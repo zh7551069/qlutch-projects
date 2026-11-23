@@ -28,4 +28,13 @@
         <item name="android:windowSplashScreenAnimatedIcon" tools:targetApi="31">@drawable/splash_blank_icon</item>
         <item name="android:windowSplashScreenAnimationDuration" tools:targetApi="31">0</item>
     </style>
+
+    <style name="Theme.Qlutch.Welcome" parent="Theme.Qlutch">
+        <item name="android:windowBackground">@android:color/white</item>
+        <item name="android:statusBarColor">@android:color/white</item>
+        <item name="android:navigationBarColor">@android:color/white</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar" tools:targetApi="27">true</item>
+        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
+    </style>
 </resources>
