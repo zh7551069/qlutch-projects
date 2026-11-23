@@ -13,7 +13,7 @@ class WelcomeBehaviorTest {
     fun boardMatchesTheBridgeArtboard() {
         assertEquals(390, WelcomeLayout.ARTBOARD_WIDTH_DP)
         assertEquals(844, WelcomeLayout.ARTBOARD_HEIGHT_DP)
-        assertEquals(0xFFFFFFFF, WelcomeLayout.CANVAS)
+        assertEquals(0xFFF2F5F7, WelcomeLayout.CANVAS)
         assertEquals(20, WelcomeLayout.CONTENT_GAP_DP)
         assertEquals(16, WelcomeLayout.CONTENT_PADDING_HORIZONTAL_DP)
         assertEquals(24, WelcomeLayout.CONTENT_PADDING_TOP_DP)
@@ -58,7 +58,7 @@ class WelcomeBehaviorTest {
         val css = repoFile("design/bridge-export/p02-welcome/styles.css").readText()
         assertEquals(5671, repoFile("design/bridge-export/p02-welcome/index.html").length())
         assertEquals(
-            "a4010d23cae2aab01f8ccb01e018c0a543de73b0232e5e22aebadf5c919d5199",
+            "d4bb4aa63265df3b4ce6da168069e6941ca87694339e3bdb214b473ffe56d06d",
             sha256(repoFile("design/bridge-export/p02-welcome/index.html").readBytes()),
         )
         assertEquals(
@@ -67,7 +67,11 @@ class WelcomeBehaviorTest {
         )
         assertTrue(html.contains("w-[390px]"))
         assertTrue(html.contains("h-[844px]"))
-        assertTrue(html.contains("background:rgb(255,255,255);"))
+        val artboard = html.substringAfter("class=\"frame p02").substringBefore(">")
+        assertTrue(artboard.contains("style=\"background:rgb(242,245,247);\""))
+        assertFalse(artboard.contains("255,255,255"))
+        assertEquals(1, html.split("background:rgb(242,245,247)").size - 1)
+        assertEquals(2, html.split("background:rgb(255,255,255)").size - 1)
         assertTrue(html.contains("gap-[20px]"))
         assertTrue(html.contains("pt-[24px]"))
         assertTrue(html.contains("pl-[16px] pr-[16px]"))
@@ -97,6 +101,7 @@ class WelcomeBehaviorTest {
         assertTrue(css.contains(".font-normal {\n  font-weight: 400;\n}"))
 
         val screen = welcomeSource("WelcomeScreen.kt") + "\n" + welcomeSource("WelcomeCheer.kt")
+        assertTrue(screen.contains("Color(WelcomeLayout.CANVAS)"))
         assertTrue(screen.contains("WelcomeLayout.ARTBOARD_WIDTH_DP"))
         assertTrue(screen.contains("WelcomeLayout.CONTENT_GAP_DP"))
         assertTrue(screen.contains("WelcomeLayout.CONTENT_PADDING_HORIZONTAL_DP"))
@@ -116,6 +121,22 @@ class WelcomeBehaviorTest {
         assertFalse(screen.contains("引导插画占位"))
         assertFalse(screen.contains("101.dp"))
         assertFalse(screen.contains("splash_g4_wordmark"))
+        assertFalse(screen.contains("0xFFFFFFFF"))
+        assertFalse(screen.contains("#FFFFFF"))
+        assertFalse(screen.contains("#ffffff"))
+
+        val colors = moduleFile("src/main/res/values/colors.xml").readText()
+        assertTrue(colors.contains("<color name=\"page_background\">#F2F5F7</color>"))
+        assertTrue(colors.contains("<color name=\"splash_background\">#F2F5F7</color>"))
+        val themes = moduleFile("src/main/res/values/themes.xml").readText()
+        assertTrue(themes.contains("android:windowBackground\">@color/page_background"))
+        assertTrue(themes.contains("android:statusBarColor\">@color/page_background"))
+        assertTrue(themes.contains("android:navigationBarColor\">@color/page_background"))
+        assertFalse(themes.contains("@android:color/white"))
+        assertFalse(themes.contains("#FFFFFF"))
+        assertFalse(themes.contains("#ffffff"))
+        val shell = moduleFile("src/main/java/dev/qlutch/app/MainActivity.kt").readText()
+        assertTrue(shell.contains("colorResource(R.color.page_background)"))
     }
 
     @Test
@@ -328,7 +349,7 @@ class WelcomeBehaviorTest {
 
         val gradle = moduleFile("build.gradle.kts").readText()
         assertTrue(gradle.contains("versionName = \"0.0.0\""))
-        assertTrue(gradle.contains("versionCode = 2"))
+        assertTrue(gradle.contains("versionCode = 3"))
     }
 
     private fun assertDisplays(file: File, text: String) {

@@ -18,6 +18,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.unit.dp
 import dev.qlutch.contract.QlutchClient
 
@@ -60,6 +61,7 @@ private fun Shell() {
         onDispose { worker.interrupt() }
     }
     Scaffold(
+        containerColor = colorResource(R.color.page_background),
         bottomBar = {
             NavigationBar {
                 NavigationBarItem(

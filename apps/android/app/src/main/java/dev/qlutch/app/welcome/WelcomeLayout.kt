@@ -7,7 +7,7 @@ package dev.qlutch.app.welcome
 internal object WelcomeLayout {
     const val ARTBOARD_WIDTH_DP = 390
     const val ARTBOARD_HEIGHT_DP = 844
-    const val CANVAS = 0xFFFFFFFF
+    const val CANVAS = 0xFFF2F5F7
 
     const val CONTENT_GAP_DP = 20
     const val CONTENT_PADDING_HORIZONTAL_DP = 16

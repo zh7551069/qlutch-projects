@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <style name="Theme.Qlutch" parent="android:Theme.Material.Light.NoActionBar" />
+    <style name="Theme.Qlutch" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/page_background</item>
+    </style>
 
     <!--
       What the user sees on the icon tap, before this activity draws.
@@ -30,9 +32,9 @@
     </style>
 
     <style name="Theme.Qlutch.Welcome" parent="Theme.Qlutch">
-        <item name="android:windowBackground">@android:color/white</item>
-        <item name="android:statusBarColor">@android:color/white</item>
-        <item name="android:navigationBarColor">@android:color/white</item>
+        <item name="android:windowBackground">@color/page_background</item>
+        <item name="android:statusBarColor">@color/page_background</item>
+        <item name="android:navigationBarColor">@color/page_background</item>
         <item name="android:windowLightStatusBar">true</item>
         <item name="android:windowLightNavigationBar" tools:targetApi="27">true</item>
         <item name="android:windowDrawsSystemBarBackgrounds">true</item>
