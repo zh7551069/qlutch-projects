@@ -20,6 +20,11 @@
             </intent-filter>
         </activity>
         <activity
+            android:name=".welcome.WelcomeActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:theme="@style/Theme.Qlutch.Welcome" />
+        <activity
             android:name=".MainActivity"
             android:exported="false" />
     </application>

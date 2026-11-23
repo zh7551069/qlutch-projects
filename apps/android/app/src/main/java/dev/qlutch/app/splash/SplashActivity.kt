@@ -13,7 +13,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
-import dev.qlutch.app.MainActivity
+import dev.qlutch.app.welcome.WelcomeActivity
 import java.util.concurrent.atomic.AtomicBoolean
 
 class SplashActivity : ComponentActivity() {
@@ -88,7 +88,7 @@ class SplashActivity : ComponentActivity() {
     private fun openNext() {
         if (isFinishing || isDestroyed) return
         if (!handedOff.compareAndSet(false, true)) return
-        val next = Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION)
+        val next = Intent(this, WelcomeActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION)
         if (Build.VERSION.SDK_INT >= 34) {
             overrideActivityTransition(OVERRIDE_TRANSITION_OPEN, 0, 0)
             overrideActivityTransition(OVERRIDE_TRANSITION_CLOSE, 0, 0)

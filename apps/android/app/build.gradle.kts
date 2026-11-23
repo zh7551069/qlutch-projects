@@ -23,7 +23,8 @@ android {
         applicationId = "dev.qlutch.app"
         minSdk = libs.versions.minSdk.get().toInt()
         targetSdk = libs.versions.targetSdk.get().toInt()
-        versionCode = 1
+        // Earlier preview packages already shipped as 0.0.0 (1). Keep the name and step the code.
+        versionCode = 2
         versionName = "0.0.0"
     }
 
