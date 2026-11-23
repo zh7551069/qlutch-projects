@@ -25,9 +25,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 
 /**
- * Plays the 25 slot frames at 40ms, holds the last frame for 1s, then starts
- * again at frame 1. The clock is elapsed time, so a late wake does not stretch
- * the cycle. The frames are already the 716×480 slot crop; Fit keeps the
+ * Plays the 50 slot frames at 40ms and starts again at frame 1 on the 2.00s
+ * boundary. The clock is elapsed time, so a late wake does not stretch the
+ * cycle. The frames are already the 716×480 slot crop; Fit keeps the
  * character and the contact shadow inside the slot.
  */
 @Composable

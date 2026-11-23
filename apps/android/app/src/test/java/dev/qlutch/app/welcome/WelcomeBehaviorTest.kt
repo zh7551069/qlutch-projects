@@ -14,7 +14,9 @@ class WelcomeBehaviorTest {
         assertEquals(390, WelcomeLayout.ARTBOARD_WIDTH_DP)
         assertEquals(844, WelcomeLayout.ARTBOARD_HEIGHT_DP)
         assertEquals(0xFFF2F5F7, WelcomeLayout.CANVAS)
-        assertEquals(20, WelcomeLayout.CONTENT_GAP_DP)
+        // Bridge export stays at gap 20. This preview tightens both content gaps to 12 and shifts the group up 24.
+        assertEquals(12, WelcomeLayout.CONTENT_GAP_DP)
+        assertEquals(24, WelcomeLayout.CONTENT_GROUP_SHIFT_UP_DP)
         assertEquals(16, WelcomeLayout.CONTENT_PADDING_HORIZONTAL_DP)
         assertEquals(24, WelcomeLayout.CONTENT_PADDING_TOP_DP)
         assertEquals(
@@ -104,6 +106,8 @@ class WelcomeBehaviorTest {
         assertTrue(screen.contains("Color(WelcomeLayout.CANVAS)"))
         assertTrue(screen.contains("WelcomeLayout.ARTBOARD_WIDTH_DP"))
         assertTrue(screen.contains("WelcomeLayout.CONTENT_GAP_DP"))
+        assertTrue(screen.contains("WelcomeLayout.CONTENT_GROUP_SHIFT_UP_DP"))
+        assertTrue(screen.contains("offset(y = (-WelcomeLayout.CONTENT_GROUP_SHIFT_UP_DP).dp)"))
         assertTrue(screen.contains("WelcomeLayout.CONTENT_PADDING_HORIZONTAL_DP"))
         assertTrue(screen.contains("WelcomeLayout.CONTENT_PADDING_TOP_DP"))
         assertTrue(screen.contains("WelcomeLayout.SLOT_WIDTH_DP"))
@@ -180,26 +184,24 @@ class WelcomeBehaviorTest {
     }
 
     @Test
-    fun cheerPlaysTwentyFiveFramesThenHoldsTheLastForOneSecond() {
-        assertEquals(25, WelcomeLayout.CHEER_FRAME_COUNT)
+    fun cheerLoopsFiftyFramesAtFortyMillisWithNoEndHold() {
+        assertEquals(50, WelcomeLayout.CHEER_FRAME_COUNT)
         assertEquals(40L, WelcomeLayout.CHEER_FRAME_MILLIS)
-        assertEquals(1_000L, WelcomeLayout.CHEER_HOLD_MILLIS)
-        assertEquals(25 * 40L, WelcomeLayout.CHEER_PLAY_MILLIS)
-        assertEquals(25 * 40L + 1_000L, WelcomeLayout.CHEER_CYCLE_MILLIS)
+        assertEquals(50 * 40L, WelcomeLayout.CHEER_PLAY_MILLIS)
+        assertEquals(2_000L, WelcomeLayout.CHEER_CYCLE_MILLIS)
+        assertEquals(WelcomeLayout.CHEER_PLAY_MILLIS, WelcomeLayout.CHEER_CYCLE_MILLIS)
         assertEquals(716, WelcomeLayout.CHEER_FRAME_WIDTH_PX)
         assertEquals(480, WelcomeLayout.CHEER_FRAME_HEIGHT_PX)
 
         assertEquals(0, welcomeCheerFrameIndex(0))
         assertEquals(0, welcomeCheerFrameIndex(39))
         assertEquals(1, welcomeCheerFrameIndex(40))
-        assertEquals(24, welcomeCheerFrameIndex(24 * 40L))
-        assertEquals(24, welcomeCheerFrameIndex(25 * 40L - 1))
-        assertEquals(24, welcomeCheerFrameIndex(25 * 40L))
-        assertEquals(24, welcomeCheerFrameIndex(25 * 40L + 999))
-        assertEquals(0, welcomeCheerFrameIndex(25 * 40L + 1_000L))
-        assertEquals(1, welcomeCheerFrameIndex(25 * 40L + 1_000L + 40L))
-        assertEquals(24, welcomeCheerFrameIndex(2 * (25 * 40L + 1_000L) - 1))
-        assertEquals(0, welcomeCheerFrameIndex(2 * (25 * 40L + 1_000L)))
+        assertEquals(49, welcomeCheerFrameIndex(49 * 40L))
+        assertEquals(49, welcomeCheerFrameIndex(50 * 40L - 1))
+        assertEquals(0, welcomeCheerFrameIndex(50 * 40L))
+        assertEquals(1, welcomeCheerFrameIndex(50 * 40L + 40L))
+        assertEquals(49, welcomeCheerFrameIndex(2 * 50 * 40L - 1))
+        assertEquals(0, welcomeCheerFrameIndex(2 * 50 * 40L))
 
         val delays = mutableListOf<Long>()
         var cursor = 0L
@@ -210,10 +212,13 @@ class WelcomeBehaviorTest {
             delays += delay
             cursor += delay
         }
-        assertEquals(List(25) { 40L } + listOf(1_000L), delays)
+        assertEquals(List(50) { 40L }, delays)
         assertEquals(WelcomeLayout.CHEER_CYCLE_MILLIS, cursor)
         assertEquals(0, welcomeCheerFrameIndex(cursor))
 
+        val layout = welcomeSource("WelcomeLayout.kt")
+        assertFalse(layout.contains("CHEER_HOLD"))
+        assertFalse(layout.contains("1_000L"))
         val cheer = welcomeSource("WelcomeCheer.kt")
         assertTrue(cheer.contains("welcomeCheerFrameIndex"))
         assertTrue(cheer.contains("welcomeCheerDelayUntilNextBoundary"))
@@ -227,37 +232,64 @@ class WelcomeBehaviorTest {
         assertFalse(cheer.contains(".webp"))
         assertFalse(cheer.contains("1080"))
         assertFalse(cheer.contains("1920"))
-        assertEquals(25, WelcomeCheerFrames.ids.size)
+        assertFalse(cheer.contains("1_000L"))
+        assertFalse(cheer.contains("CHEER_HOLD"))
+        assertEquals(50, WelcomeCheerFrames.ids.size)
     }
 
     @Test
     fun slotFramesAreTheUnmodified716By480Sequence() {
         val expected = listOf(
-            "welcome_cheer_001.png" to "d40111611a80575d5374b486a3a05de28d7177e32d5a5ef9f551c4168dada27c",
-            "welcome_cheer_002.png" to "bc4fd2c4e328b0a69b182e7f2d289acedf25dba128593ecec311e010023c7170",
-            "welcome_cheer_003.png" to "86cac22f37501268a0b1db5b2331c1e368d093516c05559efa5428a0346f5621",
-            "welcome_cheer_004.png" to "a9b2a4ac4350a8d0b13bac4f69b3fb1c686c044716a0b723e580939a1676f6b1",
-            "welcome_cheer_005.png" to "78630bb7b004f29237076bf08b6f8844d9c715bd5708d7188de17455c6643524",
-            "welcome_cheer_006.png" to "ae3c06672519538194a83674fe4bf6a31b28c59f12f0d642ea525146a752ee3b",
-            "welcome_cheer_007.png" to "62a948927ec4f86fd6755d13076602e54a0772940f17bd380033221678f31625",
-            "welcome_cheer_008.png" to "51f5c8b0410b4a68bf172bf5b15a5712e4d500bc4df12ba9ffb740c1cc6bf102",
-            "welcome_cheer_009.png" to "f6a010e8b02dd5a608275cf8f1c3c6409d725ee2e7a2291895ab2a8fbd6138c0",
-            "welcome_cheer_010.png" to "c58322a60e880ea5f30315ab200857b09b55ec2bc195023817e978d2fa5ed8cc",
-            "welcome_cheer_011.png" to "1ca2e8724e5161d660c4da657e2ee3bcbfc3ec1385e04347be9f07e4a05c2d0a",
-            "welcome_cheer_012.png" to "10da78a20412fea261826b1be95565f8452f3b3387a523093fd3b830318338bc",
-            "welcome_cheer_013.png" to "b54ba5811aa553058fea5897b6bbf545bbd562fe0205bcffbac4bd96a8b229c6",
-            "welcome_cheer_014.png" to "1ea6bcabd5680450a1d8334ac5a31731572b92d709afe2a797450b3693758265",
-            "welcome_cheer_015.png" to "409ee2a595ecab5cc27f6e0219e443ef84bae7ba55127957f6204cc6d5f2fff9",
-            "welcome_cheer_016.png" to "dd953af143588585ff4375ffe631daed2f5a30782450a67845d7aff09850fe09",
-            "welcome_cheer_017.png" to "68a7cd14f5e1a16d3a0de4306cd844bf9610677fb02f4b9d69e20fc5fa7b3d57",
-            "welcome_cheer_018.png" to "524479d0c7071ff288f36a23cff1688c6c7007dc65d4a775716e337b01635493",
-            "welcome_cheer_019.png" to "adf607c1076edd70f01b5f8a30cf30a6512bf8d41bd29259a5c784a7806e241b",
-            "welcome_cheer_020.png" to "d4b9edfeb927a2901c60a11976d23874ac9f9a7cc23f7d88e49f66e9633a0b5a",
-            "welcome_cheer_021.png" to "b80c8f65f8f4c0422a75eacaac937b56404bc1ca656ed46dfade22ce600c2981",
-            "welcome_cheer_022.png" to "a9d59eb0341accb753c46a9d0fee76604c673fba2b45951b1ae6dfea3b2b2634",
-            "welcome_cheer_023.png" to "55d467ff31fd9d1a17404194ff45ef049c62eb4540de47aef119eeac990a6ef4",
-            "welcome_cheer_024.png" to "01dcd8970aecb78649565ad79008e825bd42597ea5ee0fc85f4c3d3c00023666",
-            "welcome_cheer_025.png" to "646cb2f5c9815d50485cd74c3a0170ab17fc9140b9d1da069f2e6be7083e3b31",
+            "welcome_cheer_001.png" to "b0514fbf21878ceace35b67686d31900397b7e9a4619bf69213ef47b8794a31f",
+            "welcome_cheer_002.png" to "ccc55774ab251b2d564fa2bef1c2508482acd90dd6236e0b2540d5203feaabf2",
+            "welcome_cheer_003.png" to "ee086aba17f0904658e3c2459043947c8ac682f282bd92f348a81c76b6b614f5",
+            "welcome_cheer_004.png" to "64fb95be9e529b65eafe9e1ca347c376ee696b542b0dc926e0a5dfc5831f4a6a",
+            "welcome_cheer_005.png" to "6c91d6cc7d500be4a545cab3eb083119f7db9eb67319255464216b17b8664b87",
+            "welcome_cheer_006.png" to "2d5bab9e4b8d6c3c816de4beba90ecb683483d48dd139558b4c9717f92a5276b",
+            "welcome_cheer_007.png" to "92f54c666593097f775f60ebe918cfc8265ff93484389f5e9ab3aadf79c80a9c",
+            "welcome_cheer_008.png" to "21595df87cba69aebf3f6f61fec63ef8b023582ca7dd80b3357d2e5a5e598abc",
+            "welcome_cheer_009.png" to "9b67566b46830b4914674ab606c560e39548e6c1964191a0193eb6a82fea494a",
+            "welcome_cheer_010.png" to "77449a02560d2d5a375f13df5484a8b25b4416f9af03b56132df5033f36613b1",
+            "welcome_cheer_011.png" to "531c1653625d05d093cc7964bedeca5c2ac2b1249df51013ca671fd5d7010de6",
+            "welcome_cheer_012.png" to "208e43c001e640912a7d9f0227c19d716cbdbef3d8a0758fc8fbe9fa30ab89b5",
+            "welcome_cheer_013.png" to "a3c272218228ce3afd88a1f669bacb4aee18dd2b8a19ef24664fb10e42bd301a",
+            "welcome_cheer_014.png" to "a3c272218228ce3afd88a1f669bacb4aee18dd2b8a19ef24664fb10e42bd301a",
+            "welcome_cheer_015.png" to "19e8dd0f062df121bcca6067e5e776508903db61db47f25a8f0ae2aea9d7dc5c",
+            "welcome_cheer_016.png" to "767e43a9a503721b92718077071cf48b2f830edd4019760293e269aa634f93be",
+            "welcome_cheer_017.png" to "3b65a4f2803dcb1942ecd4d4e179db0c673c4f178e108ff00b7c8bba8299da71",
+            "welcome_cheer_018.png" to "a5ac9e0738829e4afced51ffa6d792ef8bad0e7ef7a7ea9db6417b8cd7229790",
+            "welcome_cheer_019.png" to "84f5a3870700fe3cd0707315b0cf519ebc628d2f02c8a9cb3ab5a650af54ee12",
+            "welcome_cheer_020.png" to "179d70cf2ecaa601cb2142613a5312a2c3ee0323a29fd2ae2a230b2a55ec7858",
+            "welcome_cheer_021.png" to "e0b7ab014b7c733e5e6abedba0813e225682413b309d2c5f52409110eca36480",
+            "welcome_cheer_022.png" to "abcef774efb3451c92f424fecfb9b1a3d920b4c4c29fc6625bad323aa9fce44a",
+            "welcome_cheer_023.png" to "5e476bec2516705277a98a09d9a5a1f430cbc6b52bed586afcf6d015f70aea71",
+            "welcome_cheer_024.png" to "f66ef1000feb5b08405500cbc0d965a3eca216e02f406a49f96aff70cef57128",
+            "welcome_cheer_025.png" to "900d0c8ed3d8c8b6947c8aac8ef0dd54118f0bb3b2dcb46979c06a0ebaae8a0c",
+            "welcome_cheer_026.png" to "69bf6ec2acbed8170ceaa8287cfbdc64bce22e679d6cdd3d900ea92f164fdd23",
+            "welcome_cheer_027.png" to "8a6d7e0cb4780da70ce13193d9fd16766aafa55b23bb5c0885d698975e5c1607",
+            "welcome_cheer_028.png" to "388cf772b60fdb10bfff2535e06a16ab54829d51df6726f611e87f29a190ed08",
+            "welcome_cheer_029.png" to "f85f8b436c9d883d2089ea975c3ffa958f34291e39ec4cd78bbc4b3552ef1126",
+            "welcome_cheer_030.png" to "ea04efed48ca692ba62cbb5044eacfaff5cb8017cec1ed05b8deecd0889b3b6a",
+            "welcome_cheer_031.png" to "ef4aed6cfdb7f7dae8a91a901d04873acbd97bfd7472be4e8b5c3a102c9eb901",
+            "welcome_cheer_032.png" to "487059f336b401c2864ff969dc484666c83516678cc1dfe38929f470d5cae089",
+            "welcome_cheer_033.png" to "ba1206a74f7b56871ea3dfd534ce9b6814377b7c633ac4b9d8833eb7e4306a8f",
+            "welcome_cheer_034.png" to "eab140a94adcd5274f359918e3a5ae03c36cee8d30015fdb2f54eb02138838a9",
+            "welcome_cheer_035.png" to "16b7827b42008d72bfb4008df48ee8056fda49420fcd7fa7a82bd90fcc27dba5",
+            "welcome_cheer_036.png" to "cadc64953746fde9528d86569ba4679ca0eb6ad9c004ec093e3788e321613b2d",
+            "welcome_cheer_037.png" to "cfa95a24ea25e8b0323c6a577e6bb522133bac0120f5229ef4b0cbee47191d94",
+            "welcome_cheer_038.png" to "15b7afbb0dcdbdd61893330ca32080aa6d07f064949dba35f0ddad7600938ab0",
+            "welcome_cheer_039.png" to "15b7afbb0dcdbdd61893330ca32080aa6d07f064949dba35f0ddad7600938ab0",
+            "welcome_cheer_040.png" to "f6689573e123c00b57d33bf1f9816d214cecdc3a3b3e796590d323d63b47b0f1",
+            "welcome_cheer_041.png" to "f6fd49f5d11c81239691cc678a67bde406c8744820b27302081a524ecac766a2",
+            "welcome_cheer_042.png" to "c96663440fdcd67b75dd260805e6d2c57cefe621a120451a8093bda6a91baadd",
+            "welcome_cheer_043.png" to "be178ca731f09b208ccf0680501e6c4adcd896f894e25a57eb88e4485abba1f4",
+            "welcome_cheer_044.png" to "22cf0dfc425b25fad61f7c862887af51a3c250d7f157176110de487e7bc1d91f",
+            "welcome_cheer_045.png" to "368a7ea98a969cef3fce8b2a1cef0fd5222449f374489babc8877cce28d68951",
+            "welcome_cheer_046.png" to "9329a412b625d0e45989f6885e53aa424d822a077ad1ab03e50ec132ebb14dba",
+            "welcome_cheer_047.png" to "9ce6331413e988b3205ee140655c08d6911778508f6110ceae56adc564040498",
+            "welcome_cheer_048.png" to "b0555df32dcbe6b4de26fed9e6c7c08b9f4f1ad7c75486143787ff203ca05da0",
+            "welcome_cheer_049.png" to "3aeb024e4a137cd13ff5f2bbda211779c5d32f5f58adcfa448cb7903fa6e8155",
+            "welcome_cheer_050.png" to "47cd0eade519bc19e53ad5ff5d9779e102a0407b0435d05d20df0968768287d0",
         )
         val dir = moduleFile("src/main/res/drawable-nodpi")
         val frames = dir.listFiles { file -> file.name.startsWith("welcome_cheer_") }.orEmpty().sortedBy { it.name }
@@ -349,7 +381,7 @@ class WelcomeBehaviorTest {
 
         val gradle = moduleFile("build.gradle.kts").readText()
         assertTrue(gradle.contains("versionName = \"0.0.0\""))
-        assertTrue(gradle.contains("versionCode = 3"))
+        assertTrue(gradle.contains("versionCode = 4"))
     }
 
     private fun assertDisplays(file: File, text: String) {

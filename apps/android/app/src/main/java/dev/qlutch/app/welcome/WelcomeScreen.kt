@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.widthIn
@@ -61,7 +62,8 @@ internal fun WelcomeScreen() {
                         start = WelcomeLayout.CONTENT_PADDING_HORIZONTAL_DP.dp,
                         end = WelcomeLayout.CONTENT_PADDING_HORIZONTAL_DP.dp,
                         top = WelcomeLayout.CONTENT_PADDING_TOP_DP.dp,
-                    ),
+                    )
+                    .offset(y = (-WelcomeLayout.CONTENT_GROUP_SHIFT_UP_DP).dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(
                     WelcomeLayout.CONTENT_GAP_DP.dp,
