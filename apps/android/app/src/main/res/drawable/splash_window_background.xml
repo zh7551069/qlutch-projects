@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!--
+      Starting window only. The system process can paint a color and cannot
+      run the in-app layout. SplashActivity replaces this with
+      SplashLaunchArtworkDrawable before the first activity draw.
+    -->
+    <item android:drawable="@color/splash_background" />
+</layer-list>

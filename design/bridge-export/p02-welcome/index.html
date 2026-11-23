@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+
+  <head>
+    <meta charset="utf-8" />
+    <title>Exported Content</title>
+    <link
+      rel="preconnect"
+      href="https://fonts.googleapis.com"
+    >
+    <link
+      rel="preconnect"
+      href="https://fonts.gstatic.com"
+      crossorigin
+    >
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@100;200;300;400;500;600;700;800;900&display=swap"
+      rel="stylesheet"
+    >
+    <link
+      rel="stylesheet"
+      href="styles.css"
+    />
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        width: 100vw;
+        min-height: 100vh;
+        overflow-x: hidden;
+        overflow-y: auto;
+        display: flex;
+        align-items: flex-start;
+        justify-content: center;
+        background: #f0f0f0;
+      }
+
+      .viewport {
+        width: 398px;
+        min-height: 852px;
+        transform-origin: top center;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="viewport">
+      <div class="content-layer">
+        <div
+          class="frame p02 absolute box-border flex flex-col h-[844px] items-start left-[0px] overflow-hidden top-[0px] w-[390px]"
+          style="background:rgb(242,245,247);"
+        >
+          <div
+            class="frame content box-border flex flex-col gap-[20px] grow h-[636px] items-center justify-center min-h-0 min-w-0 overflow-hidden pl-[16px] pr-[16px] pt-[24px] relative w-[390px]"
+            style="flex-basis:390px;"
+          >
+            <div
+              class="frame illustration-slot box-border flex flex-col gap-[8px] h-[240px] items-center justify-center overflow-hidden relative rounded-[22px] w-[358px]"
+              style="background:rgb(241,244,249);"
+            >
+              <div
+                class="frame sticker-area h-[101px] overflow-hidden relative rounded-[16px] w-[101px]"
+                style="background:rgb(255,255,255);box-shadow:inset 0 0 0 1px rgb(225,232,240);"
+                data-layer-id="2:40"
+              ></div>
+              <div
+                class="text relative text-center whitespace-pre"
+                style="width:auto;height:auto;"
+              ><span
+                  class="font-normal text-[13px] text-[rgb(124,132,143)]"
+                  style="font-family:Inter, sans-serif;"
+                >引导插画占位</span></div>
+            </div>
+            <div
+              class="text qlutch relative text-center whitespace-pre"
+              style="width:auto;height:auto;"
+            ><span
+                class="font-extrabold text-[50px] text-[rgb(108,92,231)]"
+                style="font-family:Inter, sans-serif;"
+              >Qlutch。</span></div>
+            <div
+              class="text relative text-center w-[358px] whitespace-pre-wrap"
+              style="height:auto;"
+            ><span
+                class="font-semibold text-[16px] text-[rgb(15,23,42)]"
+                style="font-family:Inter, sans-serif;"
+              >沉迷于学习，对学习上瘾</span></div>
+          </div>
+          <div
+            class="frame footer box-border flex flex-col gap-[16px] items-center overflow-hidden pb-[28px] pl-[16px] pr-[16px] relative w-[390px]"
+            style="height:auto;"
+          >
+            <div
+              class="frame button-primary box-border flex gap-[8px] h-[50px] items-center justify-center px-[16px] relative rounded-[25px] w-[358px]"
+              style="background:rgb(15,23,42);"
+            >
+              <div
+                class="text label relative text-center whitespace-pre"
+                style="width:auto;height:auto;"
+              ><span
+                  class="font-semibold text-[16px] text-[rgb(255,255,255)]"
+                  style="font-family:Inter, sans-serif;"
+                >开始</span></div>
+            </div>
+            <div
+              class="frame button-secondary box-border flex h-[50px] items-center justify-center px-[16px] relative rounded-[25px] w-[358px]"
+              style="background:rgb(255,255,255);box-shadow:inset 0 0 0 1px rgb(225,232,240);"
+              data-layer-id="2:47"
+            >
+              <div
+                class="text label relative text-center whitespace-pre"
+                style="width:auto;height:auto;"
+              ><span
+                  class="font-semibold text-[16px] text-[rgb(15,23,42)]"
+                  style="font-family:Inter, sans-serif;"
+                >已有账号</span></div>
+            </div>
+            <div
+              class="text relative text-center whitespace-pre"
+              style="width:auto;height:auto;"
+            ><span
+                class="font-normal text-[13px] text-[rgb(124,132,143)]"
+                style="font-family:Inter, sans-serif;"
+              >教材不用于训练模型</span></div>
+            <div
+              class="text relative text-center w-[358px] whitespace-pre-wrap"
+              style="height:auto;"
+            ><span
+                class="font-normal text-[13px] text-[rgb(124,132,143)]"
+                style="font-family:Inter, sans-serif;"
+              >继续即表示同意《用户协议》和《隐私政策》</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <script>
+      window.addEventListener('DOMContentLoaded', function() {
+        var baseWidth = 398;
+
+        function fit() {
+          var viewport = document.querySelector('.viewport');
+          if (!viewport) return;
+          var scale = window.innerWidth / baseWidth;
+          viewport.style.transform = 'scale(' + scale + ')';
+        }
+        fit();
+        window.addEventListener('resize', fit);
+      });
+    </script>
+  </body>
+
+</html>

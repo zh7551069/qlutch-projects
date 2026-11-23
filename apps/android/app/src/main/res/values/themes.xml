@@ -1,4 +1,42 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <style name="Theme.Qlutch" parent="android:Theme.Material.Light.NoActionBar" />
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <style name="Theme.Qlutch" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/page_background</item>
+    </style>
+
+    <!--
+      What the user sees on the icon tap, before this activity draws.
+      Android 12+ draws the starting window itself: one opaque color, plus an
+      icon masked to a circle (160dp or 192dp). That circle cannot hold the
+      2/3-width 9:16 still with the wordmark and slogan, and a cropped squirrel
+      there is a different size from the in-app frame, so the icon is a flat
+      plate of the splash color. The activity then draws the real frame.
+      Pre-12 uses the window background, which is the same flat color: a custom
+      drawable class cannot run in the system process, and a fixed-dp bitmap
+      would be the wrong size on any screen that is not 375dp wide.
+      Edge to edge so that window and the in-app stage share one size.
+    -->
+    <style name="Theme.Qlutch.Splash" parent="Theme.Qlutch">
+        <item name="android:windowBackground">@drawable/splash_window_background</item>
+        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar" tools:targetApi="27">true</item>
+        <item name="android:enforceStatusBarContrast" tools:targetApi="29">false</item>
+        <item name="android:enforceNavigationBarContrast" tools:targetApi="29">false</item>
+        <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
+        <item name="android:windowSplashScreenBackground" tools:targetApi="31">@color/splash_background</item>
+        <item name="android:windowSplashScreenAnimatedIcon" tools:targetApi="31">@drawable/splash_blank_icon</item>
+        <item name="android:windowSplashScreenAnimationDuration" tools:targetApi="31">0</item>
+    </style>
+
+    <style name="Theme.Qlutch.Welcome" parent="Theme.Qlutch">
+        <item name="android:windowBackground">@color/page_background</item>
+        <item name="android:statusBarColor">@color/page_background</item>
+        <item name="android:navigationBarColor">@color/page_background</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar" tools:targetApi="27">true</item>
+        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
+    </style>
 </resources>

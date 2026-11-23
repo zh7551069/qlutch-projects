@@ -17,12 +17,14 @@ androidComponents {
 android {
     namespace = "dev.qlutch.app"
     compileSdk = libs.versions.compileSdk.get().toInt()
+    compileSdkMinor = libs.versions.compileSdkMinor.get().toInt()
 
     defaultConfig {
         applicationId = "dev.qlutch.app"
         minSdk = libs.versions.minSdk.get().toInt()
         targetSdk = libs.versions.targetSdk.get().toInt()
-        versionCode = 1
+        // Earlier preview packages already shipped as 0.0.0 (1) through (4). Keep the name and step the code.
+        versionCode = 5
         versionName = "0.0.0"
     }
 
@@ -34,6 +36,10 @@ android {
 
     buildFeatures {
         compose = true
+    }
+
+    androidResources {
+        noCompress += "mp4"
     }
 
     testOptions {
@@ -49,6 +55,8 @@ android {
 dependencies {
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)
+    implementation(libs.compose.foundation)
     implementation(libs.compose.material3)
     implementation(libs.activity.compose)
+    testImplementation(libs.junit)
 }

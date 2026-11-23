@@ -1,4 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Qlutch</string>
+    <string name="splash_wordmark">Qlutch</string>
+    <string name="splash_wordmark_period">。</string>
+    <string name="splash_slogan">让记知识，更轻松有趣</string>
+    <string name="splash_skip">跳过开屏</string>
+    <string name="splash_continue">继续</string>
+    <string name="welcome_wordmark_latin">Qlutch</string>
+    <string name="welcome_wordmark_period">。</string>
+    <string name="welcome_tagline">沉迷于学习，对学习上瘾</string>
+    <string name="welcome_start">开始</string>
+    <string name="welcome_existing_account">已有账号</string>
+    <string name="welcome_training_note">教材不用于训练模型</string>
+    <string name="welcome_legal">继续即表示同意《用户协议》和《隐私政策》</string>
 </resources>
