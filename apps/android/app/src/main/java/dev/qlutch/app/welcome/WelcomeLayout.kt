@@ -24,11 +24,61 @@ internal object WelcomeLayout {
     const val SLOT_RADIUS_DP = 22
     const val SLOT_COLOR = 0xFFF1F4F9
 
+    /**
+     * The cheer frames are 716×480 crops of a jumping squirrel. At rest (frames
+     * 1-5, 16-17, 35, 40-46 and 50, about 40% of the cycle) its ink centre sits
+     * 14 artboard px left of the canvas centre, so on screen it reads 7dp off
+     * centre to the left. Shifting the artwork right by that much centres the
+     * pose the eye actually rests on; the airborne frames drift a little right,
+     * which reads as the squirrel leaping that way and is not noticeable at
+     * 40ms per frame.
+     */
+    const val SLOT_CONTENT_SHIFT_RIGHT_DP = -7
+
+    /**
+     * The frames reserve headroom for the jump, which leaves the squirrel
+     * sitting near the bottom of the slot: at rest its ink stops 19.4dp above
+     * the slot edge, and 40dp of empty space separates it from the wordmark.
+     * Moving the artwork down tightens that to about 30dp while keeping the
+     * squirrel the same size and still clear of the slot's bottom edge.
+     */
+    const val SLOT_CONTENT_SHIFT_DOWN_DP = 20
+
     const val WORDMARK = "Qlutch。"
     const val WORDMARK_LATIN = "Qlutch"
     const val WORDMARK_PERIOD = "。"
-    const val WORDMARK_SIZE_SP = 50
-    const val WORDMARK_WEIGHT = 800
+
+    /**
+     * The wordmark is the same baked artwork the splash draws
+     * (res/drawable-nodpi/splash_g4_wordmark.png), so both screens cannot drift
+     * apart in typeface. The glyphs, the trailing "。" and the #6C5CE7 fill are
+     * already inside the PNG; nothing here is rendered from a font.
+     */
+    const val WORDMARK_ART_WIDTH_PX = 941
+    const val WORDMARK_ART_HEIGHT_PX = 238
+
+    /** Display width on the 390 artboard. Height follows the artwork aspect (about 44dp). */
+    const val WORDMARK_IMAGE_WIDTH_DP = 174
+
+    /**
+     * The wordmark keeps the box the old 50sp text line occupied so that
+     * SLOT_TO_WORDMARK_GAP_DP and WORDMARK_TO_TAGLINE_GAP_DP still measure the
+     * same edges. That line was 72dp tall, not 50dp: the trailing "。" was set
+     * in Noto Sans SC, whose line metrics run about 1.45em, and it stretched
+     * the shared row. Measured on the emulator at 420dpi (190px).
+     */
+    const val WORDMARK_BOX_HEIGHT_DP = 72
+
+    /**
+     * A 50sp text line puts its ink a little below the box centre, because
+     * Inter's ascent is taller than its descent, while the baked PNG is
+     * geometrically centred in its own box. Shifting the image down by this
+     * keeps the ink where the text had it, so neither the slot gap above nor
+     * the tagline gap below moves.
+     */
+    const val WORDMARK_INK_SHIFT_DOWN_DP = 5
+
+    /** Baked into the shared artwork; kept here so the palette stays in one place. */
     const val WORDMARK_COLOR = 0xFF6C5CE7
 
     const val TAGLINE = "沉迷于学习，对学习上瘾"

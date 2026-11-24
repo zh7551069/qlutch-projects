@@ -28,8 +28,17 @@ class WelcomeBehaviorTest {
         assertEquals(240, WelcomeLayout.SLOT_HEIGHT_DP)
         assertEquals(22, WelcomeLayout.SLOT_RADIUS_DP)
         assertEquals(0xFFF1F4F9, WelcomeLayout.SLOT_COLOR)
-        assertEquals(50, WelcomeLayout.WORDMARK_SIZE_SP)
-        assertEquals(800, WelcomeLayout.WORDMARK_WEIGHT)
+        // The rest pose sits 14 artboard px left of centre; 716px of artwork maps
+        // to 358dp, so 7dp puts the pose the eye rests on back on the midline.
+        assertEquals(-7, WelcomeLayout.SLOT_CONTENT_SHIFT_RIGHT_DP)
+        // Frames reserve jump headroom; nudging down brings the squirrel closer
+        // to the wordmark without resizing it. Value set by 辉哥 on 2026-11-24.
+        assertEquals(20, WelcomeLayout.SLOT_CONTENT_SHIFT_DOWN_DP)
+        assertEquals(941, WelcomeLayout.WORDMARK_ART_WIDTH_PX)
+        assertEquals(238, WelcomeLayout.WORDMARK_ART_HEIGHT_PX)
+        assertEquals(174, WelcomeLayout.WORDMARK_IMAGE_WIDTH_DP)
+        assertEquals(72, WelcomeLayout.WORDMARK_BOX_HEIGHT_DP)
+        assertEquals(5, WelcomeLayout.WORDMARK_INK_SHIFT_DOWN_DP)
         assertEquals(0xFF6C5CE7, WelcomeLayout.WORDMARK_COLOR)
         assertEquals(16, WelcomeLayout.TAGLINE_SIZE_SP)
         assertEquals(600, WelcomeLayout.TAGLINE_WEIGHT)
@@ -137,14 +146,18 @@ class WelcomeBehaviorTest {
         assertTrue(screen.contains("weight(1f)"))
         assertFalse(screen.contains("引导插画占位"))
         assertFalse(screen.contains("101.dp"))
-        assertFalse(screen.contains("splash_g4_wordmark"))
+        // P02 wordmark is the splash's baked PNG, not live text: one typeface on both screens.
+        assertTrue(screen.contains("R.drawable.splash_g4_wordmark"))
+        assertTrue(screen.contains("WelcomeLayout.WORDMARK_IMAGE_WIDTH_DP"))
+        assertTrue(screen.contains("WelcomeLayout.WORDMARK_BOX_HEIGHT_DP"))
+        assertFalse(screen.contains("WORDMARK_SIZE_SP"))
         assertFalse(screen.contains("0xFFFFFFFF"))
         assertFalse(screen.contains("#FFFFFF"))
         assertFalse(screen.contains("#ffffff"))
 
         val colors = moduleFile("src/main/res/values/colors.xml").readText()
         assertTrue(colors.contains("<color name=\"page_background\">#F2F5F7</color>"))
-        assertTrue(colors.contains("<color name=\"splash_background\">#F2F5F7</color>"))
+        assertTrue(colors.contains("<color name=\"splash_background\">#F2F5F8</color>"))
         val themes = moduleFile("src/main/res/values/themes.xml").readText()
         assertTrue(themes.contains("android:windowBackground\">@color/page_background"))
         assertTrue(themes.contains("android:statusBarColor\">@color/page_background"))
@@ -182,9 +195,9 @@ class WelcomeBehaviorTest {
         val screen = welcomeSource("WelcomeScreen.kt")
         assertTrue(screen.contains("R.string.welcome_wordmark_latin"))
         assertTrue(screen.contains("R.string.welcome_wordmark_period"))
-        assertTrue(screen.contains("WelcomeType.interExtraBold"))
-        assertTrue(screen.contains("WelcomeType.notoExtraBold"))
-        assertTrue(screen.contains("FontWeight.ExtraBold"))
+        assertTrue(screen.contains("ContentScale.Fit"))
+        assertTrue(screen.contains("WelcomeLayout.WORDMARK_ART_WIDTH_PX"))
+        assertTrue(screen.contains("WelcomeLayout.WORDMARK_ART_HEIGHT_PX"))
         assertTrue(screen.contains("WelcomeType.notoSemiBold"))
         assertTrue(screen.contains("WelcomeType.notoRegular"))
         assertTrue(screen.contains("R.string.welcome_tagline"))
@@ -192,8 +205,7 @@ class WelcomeBehaviorTest {
         assertTrue(screen.contains("R.string.welcome_existing_account"))
         assertTrue(screen.contains("R.string.welcome_training_note"))
         assertTrue(screen.contains("R.string.welcome_legal"))
-        assertFalse(screen.contains("splash_g4_wordmark"))
-        assertFalse(screen.contains("R.drawable.splash_"))
+        assertTrue(screen.contains("R.drawable.splash_g4_wordmark"))
     }
 
     @Test
@@ -381,7 +393,7 @@ class WelcomeBehaviorTest {
         assertFalse(welcome.contains("MainActivity"))
         assertFalse(welcome.contains("登录"))
         assertFalse(welcome.contains("SharedPreferences"))
-        assertFalse(welcome.contains("splash_g4_wordmark"))
+        assertTrue(welcome.contains("splash_g4_wordmark"))
         assertTrue(welcome.contains("onClick = {}"))
         val manifest = moduleFile("src/main/AndroidManifest.xml").readText()
         assertTrue(manifest.contains("android:name=\".welcome.WelcomeActivity\""))
@@ -395,6 +407,32 @@ class WelcomeBehaviorTest {
         val gradle = moduleFile("build.gradle.kts").readText()
         assertTrue(gradle.contains("versionName = \"0.0.0\""))
         assertTrue(gradle.contains("versionCode = 6"))
+    }
+
+    @Test
+    fun welcomeWordmarkIsTheSameBakedArtworkTheSplashDraws() {
+        val artwork = moduleFile("src/main/res/drawable-nodpi/splash_g4_wordmark.png")
+        val bytes = artwork.readBytes()
+        assertEquals(
+            "ac47a0ff712f9af63632ac44c7a2014ab7fe71ca18afd48587450b2dd88cc92b",
+            sha256(bytes),
+        )
+        assertEquals(WelcomeLayout.WORDMARK_ART_WIDTH_PX, readInt(bytes, 16))
+        assertEquals(WelcomeLayout.WORDMARK_ART_HEIGHT_PX, readInt(bytes, 20))
+
+        val welcome = welcomeSource("WelcomeScreen.kt")
+        val splashSources = listOf("SplashFrame.kt", "SplashVideoView.kt", "SplashLaunchArtwork.kt")
+            .joinToString("\n") { moduleFile("src/main/java/dev/qlutch/app/splash/$it").readText() }
+        assertTrue(welcome.contains("R.drawable.splash_g4_wordmark"))
+        assertTrue(splashSources.contains("R.drawable.splash_g4_wordmark"))
+
+        // Exactly one copy of the artwork, and no font-rendered wordmark left behind.
+        assertTrue(
+            moduleFile("src/main/res").walk().none { it.isFile && it.name.startsWith("wordmark") },
+        )
+        assertFalse(welcome.contains("WelcomeType.interExtraBold"))
+        assertFalse(welcome.contains("WelcomeType.notoExtraBold"))
+        assertFalse(welcome.contains("WORDMARK_SIZE_SP"))
     }
 
     private fun assertDisplays(file: File, text: String) {

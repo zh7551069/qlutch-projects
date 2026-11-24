@@ -389,7 +389,7 @@ class SplashBehaviorTest {
     @Test
     fun previewSplashKeepsTheV4BackgroundAndOverlaysTheFixedWordmark() {
         val colors = moduleFile("src/main/res/values/colors.xml").readText()
-        assertTrue(colors.contains("<color name=\"splash_background\">#F2F5F7</color>"))
+        assertTrue(colors.contains("<color name=\"splash_background\">#F2F5F8</color>"))
         val themes = moduleFile("src/main/res/values/themes.xml").readText()
         assertTrue(themes.contains("android:windowBackground\">@drawable/splash_window_background"))
         assertTrue(themes.contains("android:windowSplashScreenBackground\" tools:targetApi=\"31\">@color/splash_background"))
@@ -650,7 +650,7 @@ class SplashBehaviorTest {
         assertFalse(window.contains("splash_g4_wordmark"))
 
         val colors = moduleFile("src/main/res/values/colors.xml").readText()
-        assertTrue(colors.contains("<color name=\"splash_background\">#F2F5F7</color>"))
+        assertTrue(colors.contains("<color name=\"splash_background\">#F2F5F8</color>"))
         assertTrue(colors.contains("<color name=\"splash_brand\">#6C5CE7</color>"))
 
         val phone = SplashLaunchGeometry.framePx(1080, 2340, 3f)

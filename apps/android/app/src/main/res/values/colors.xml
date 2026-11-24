@@ -3,7 +3,14 @@
     <color name="ic_launcher_background">#F2F5F7</color>
     <color name="canvas">#F6F8FF</color>
     <color name="page_background">#F2F5F7</color>
-    <color name="splash_background">#F2F5F7</color>
+    <!--
+      Matches what the splash video actually renders, not the page background.
+      splash.mp4 is H.264 yuv420p with no colour metadata, so every decoder
+      guesses differently and the slot lands on #F2F5F8 here; against the
+      #F2F5F7 page that one-step step showed up as a visible seam around the
+      2/3-width stage. page_background stays #F2F5F7 for the welcome screen.
+    -->
+    <color name="splash_background">#F2F5F8</color>
     <color name="splash_brand">#6C5CE7</color>
     <color name="ink">#20244A</color>
     <color name="spark">#FF6B4A</color>

@@ -1,5 +1,6 @@
 package dev.qlutch.app.welcome
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -7,8 +8,8 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -16,6 +17,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -27,6 +29,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.PlatformTextStyle
@@ -137,30 +141,30 @@ internal fun WelcomeScreen() {
     }
 }
 
+/**
+ * The splash's baked wordmark PNG, drawn at the size the 50sp text line used to
+ * take. One image means the two screens cannot show different glyphs, and the
+ * trailing "。" rides along inside the artwork instead of a second typeface.
+ */
 @Composable
 private fun Wordmark() {
-    Row(
-        horizontalArrangement = Arrangement.Center,
+    val description = stringResource(R.string.welcome_wordmark_latin) +
+        stringResource(R.string.welcome_wordmark_period)
+    Box(
+        modifier = Modifier.height(WelcomeLayout.WORDMARK_BOX_HEIGHT_DP.dp),
+        contentAlignment = Alignment.Center,
     ) {
-        Text(
-            text = stringResource(R.string.welcome_wordmark_latin),
-            modifier = Modifier.alignByBaseline(),
-            style = welcomeTextStyle(
-                sizeSp = WelcomeLayout.WORDMARK_SIZE_SP,
-                color = WelcomeLayout.WORDMARK_COLOR,
-                fontFamily = WelcomeType.interExtraBold,
-                fontWeight = FontWeight.ExtraBold,
-            ),
-        )
-        Text(
-            text = stringResource(R.string.welcome_wordmark_period),
-            modifier = Modifier.alignByBaseline(),
-            style = welcomeTextStyle(
-                sizeSp = WelcomeLayout.WORDMARK_SIZE_SP,
-                color = WelcomeLayout.WORDMARK_COLOR,
-                fontFamily = WelcomeType.notoExtraBold,
-                fontWeight = FontWeight.ExtraBold,
-            ),
+        Image(
+            painter = painterResource(R.drawable.splash_g4_wordmark),
+            contentDescription = description,
+            modifier = Modifier
+                .offset(y = WelcomeLayout.WORDMARK_INK_SHIFT_DOWN_DP.dp)
+                .width(WelcomeLayout.WORDMARK_IMAGE_WIDTH_DP.dp)
+                .aspectRatio(
+                    WelcomeLayout.WORDMARK_ART_WIDTH_PX.toFloat() /
+                        WelcomeLayout.WORDMARK_ART_HEIGHT_PX.toFloat(),
+                ),
+            contentScale = ContentScale.Fit,
         )
     }
 }

@@ -6,8 +6,12 @@ import androidx.compose.ui.text.font.FontWeight
 import dev.qlutch.app.R
 
 /**
- * Latin wordmark is Inter ExtraBold. Chinese copy falls back to a Noto Sans SC
- * subset at the same weight, because Inter has no CJK glyphs.
+ * Chinese copy falls back to a Noto Sans SC subset at the same weight, because
+ * Inter has no CJK glyphs.
+ *
+ * The wordmark itself is no longer set in Inter: both the splash and the
+ * welcome screen draw the same baked PNG (see WelcomeLayout.WORDMARK_ART_*),
+ * so the extra-bold entries below stay only as the brand typeface reference.
  */
 internal object WelcomeType {
     val interExtraBold = FontFamily(

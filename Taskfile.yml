@@ -61,6 +61,21 @@ tasks:
     cmds:
       - pnpm --filter @qlutch/admin dev
 
+  android:
+    desc: 启动 Android 模拟器，编译安装并看到启动页
+    cmds:
+      - ./tools/android/demo.sh
+
+  android-welcome:
+    desc: 直接进 Android 欢迎页（跳过启动动画）
+    cmds:
+      - ./tools/android/demo.sh --welcome
+
+  android-cold:
+    desc: 冷启动 Android 模拟器并跑单测后再安装
+    cmds:
+      - ./tools/android/demo.sh --cold --tests
+
   golangci-install:
     internal: true
     status:

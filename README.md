@@ -62,6 +62,9 @@ task admin
 | `task lint` | 平台 lint、后管检查、三端结构检查 |
 | `task test` | `go test`、契约模型测试、后管单元测试 |
 | `task api` / `task worker` / `task admin` | 分进程启动 |
+| `task android` | 起模拟器、编译安装、看启动页 |
+| `task android-welcome` | 同上去掉启动动画，直接看欢迎页 |
+| `task android-cold` | 冷启动模拟器，并先跑 Android 单元测试 |
 
 `packages/contracts` 变更后必须跑 `task gen`，并且生成物不能有未提交的差异。生成文件标了 `DO NOT EDIT`。
 

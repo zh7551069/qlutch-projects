@@ -6,6 +6,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -29,6 +30,9 @@ import kotlinx.coroutines.isActive
  * boundary. The clock is elapsed time, so a late wake does not stretch the
  * cycle. The frames are already the 716×480 slot crop; Fit keeps the
  * character and the contact shadow inside the slot.
+ * The offset below nudges the character to where the eye reads it as centred
+ * and places it closer to the wordmark; see SLOT_CONTENT_SHIFT_RIGHT_DP and
+ * SLOT_CONTENT_SHIFT_DOWN_DP.
  */
 @Composable
 internal fun WelcomeCheerSlot(modifier: Modifier = Modifier) {
@@ -58,7 +62,12 @@ internal fun WelcomeCheerSlot(modifier: Modifier = Modifier) {
         Image(
             bitmap = frames[index],
             contentDescription = null,
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .offset(
+                    x = WelcomeLayout.SLOT_CONTENT_SHIFT_RIGHT_DP.dp,
+                    y = WelcomeLayout.SLOT_CONTENT_SHIFT_DOWN_DP.dp,
+                ),
             contentScale = ContentScale.Fit,
             alignment = Alignment.Center,
         )
