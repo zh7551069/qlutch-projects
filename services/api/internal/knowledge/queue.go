@@ -42,7 +42,8 @@ func (q *MemoryQueue) Items() [][]byte {
 }
 
 // RedisQueue pushes opaque payloads onto a Redis list.
-// The worker shell pops that list and does not change import job status.
+// The worker pops that list and runs ProcessQueued. The queue itself does not
+// change import job status.
 type RedisQueue struct {
 	Client *redis.Client
 	Key    string
