@@ -45,16 +45,29 @@ func run(log *slog.Logger) error {
 		_ = shutdown(shutCtx)
 	}()
 
-	checks, closeDeps := openChecks(cfg, log)
+	pool, err := pgxpool.New(context.Background(), cfg.DatabaseURL)
+	if err != nil {
+		log.Error("database", "reason", "invalid database url")
+		return errors.New("database url is invalid")
+	}
+	defer pool.Close()
+	migCtx, migCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	store, err := identity.OpenPostgres(migCtx, pool, "")
+	migCancel()
+	if err != nil {
+		log.Error("identity", "reason", "schema was not created")
+		return errors.New("identity store unavailable")
+	}
+	checks, closeDeps := openChecks(cfg, pool)
 	defer closeDeps()
 
 	rt := airuntime.New()
 	log.Info("ai runtime", "status", rt.Status())
-	learner, err := identity.New(identity.Options{})
+	learner, err := identity.New(identity.Options{Store: store})
 	if err != nil {
 		return err
 	}
-	log.Info("identity", "learner", "otp-session", "sms", "mock", "store", "memory", "internal", string(auth.DomainInternal))
+	log.Info("identity", "learner", "otp-session", "sms", "mock", "store", "postgres", "internal", string(auth.DomainInternal))
 
 	srv := &http.Server{
 		Addr:              cfg.HTTPAddr,
@@ -86,19 +99,9 @@ type quietRedisLog struct{}
 
 func (quietRedisLog) Printf(context.Context, string, ...interface{}) {}
 
-func openChecks(cfg config.Config, log *slog.Logger) ([]ready.Pinger, func()) {
-	var closers []func()
-	var pool *pgxpool.Pool
-	opened, err := pgxpool.New(context.Background(), cfg.DatabaseURL)
-	if err != nil {
-		log.Warn("database checker disabled", "reason", "invalid database url")
-	} else {
-		pool = opened
-		closers = append(closers, pool.Close)
-	}
+func openChecks(cfg config.Config, pool *pgxpool.Pool) ([]ready.Pinger, func()) {
 	redis.SetLogger(quietRedisLog{})
 	redisClient := redis.NewClient(&redis.Options{Addr: cfg.RedisAddr})
-	closers = append(closers, func() { _ = redisClient.Close() })
 	checks := []ready.Pinger{
 		ready.Postgres{Pool: pool},
 		ready.Redis{Client: redisClient},
@@ -110,9 +113,5 @@ func openChecks(cfg config.Config, log *slog.Logger) ([]ready.Pinger, func()) {
 			Secret:    cfg.S3SecretKey,
 		},
 	}
-	return checks, func() {
-		for _, closeFn := range closers {
-			closeFn()
-		}
-	}
+	return checks, func() { _ = redisClient.Close() }
 }
