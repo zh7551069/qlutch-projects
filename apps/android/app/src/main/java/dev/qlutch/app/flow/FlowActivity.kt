@@ -173,6 +173,50 @@ private fun NewUserFlow(
         onHome()
     }
 
+    fun skipFirstPack() {
+        if (busy) return
+        busy = true
+        error = ""
+        Thread {
+            val outcome = api.skipFirstPack(FlowLogic.newIdempotencyKey(), bearer)
+            runOnUi {
+                when (outcome) {
+                    is ApiOutcome.Ok -> applySkip(outcome.value.next_step)
+                    is ApiOutcome.Err -> {
+                        busy = false
+                        error = outcome.code
+                    }
+                    is ApiOutcome.Transport -> {
+                        busy = false
+                        error = outcome.reason
+                    }
+                }
+            }
+        }.start()
+    }
+
+    fun applySkip(nextStep: String) {
+        if (nextStep == FlowLogic.NEXT_ONBOARDING) {
+            Thread {
+                val state = api.onboarding(bearer)
+                runOnUi {
+                    busy = false
+                    when (state) {
+                        is ApiOutcome.Ok -> {
+                            backStack = emptyList()
+                            go(FlowLogic.placeForOnboarding(state.value.current_step_id))
+                        }
+                        is ApiOutcome.Err -> error = state.code
+                        is ApiOutcome.Transport -> error = state.reason
+                    }
+                }
+            }.start()
+            return
+        }
+        busy = false
+        afterSession(nextStep)
+    }
+
     fun afterSession(nextStep: String) {
         val next = FlowLogic.placeAfterSession(nextStep, permissionsSeen)
         if (next.route == FlowRoute.HOME) {
@@ -424,7 +468,9 @@ private fun NewUserFlow(
                 onUpload = { push(FlowPlace(FlowRoute.WAIT, stepIndex = 7, waitSource = FlowRoute.MORE)) },
                 onClosed = { toast = true },
                 onPaste = { push(FlowPlace(FlowRoute.PASTE, stepIndex = 7)) },
-                onNoMaterial = { openHome() },
+                error = error,
+                busy = busy,
+                onNoMaterial = { skipFirstPack() },
             )
             FlowRoute.PASTE -> PasteScreen(
                 notes = notes,
@@ -936,6 +982,8 @@ private fun PackScreen(onBack: () -> Unit, onPhoto: () -> Unit, onMore: () -> Un
 @Composable
 private fun MoreScreen(
     toast: Boolean,
+    error: String,
+    busy: Boolean,
     onBack: () -> Unit,
     onUpload: () -> Unit,
     onClosed: () -> Unit,
@@ -977,8 +1025,14 @@ private fun MoreScreen(
                 }
                 ImportChip("粘贴笔记", Modifier.width(358.dp), onPaste)
             }
-            Box(Modifier.padding(start = 16.dp, end = 16.dp, bottom = 34.dp)) {
-                SecondaryButton("我没有材料", onClick = onNoMaterial)
+            Column(
+                Modifier.padding(start = 16.dp, end = 16.dp, bottom = 34.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                if (error.isNotEmpty()) {
+                    Text(error, style = qlutchText(13, QlutchTone.footer, WelcomeType.notoRegular, FontWeight.Normal))
+                }
+                SecondaryButton("我没有材料", enabled = !busy, onClick = onNoMaterial)
             }
         }
         Box(Modifier.fillMaxSize().padding(bottom = 75.dp), contentAlignment = Alignment.BottomCenter) {

@@ -30,6 +30,11 @@ struct IdentityClient {
         return await post("/v1/identity/onboarding", body: body, key: "", bearer: bearer)
     }
 
+    func skipFirstPack(key: String, bearer: String) async -> CallResult<FirstPackSkipResponse> {
+        let body = FirstPackSkipRequest()
+        return await post("/v1/knowledge/first-pack/skip", body: body, key: key, bearer: bearer)
+    }
+
     private func post<B: Encodable, T: Decodable>(_ path: String, body: B, key: String, bearer: String?) async -> CallResult<T> {
         let data = try? JSONEncoder().encode(body)
         return await call("POST", path, body: data, key: key, bearer: bearer)

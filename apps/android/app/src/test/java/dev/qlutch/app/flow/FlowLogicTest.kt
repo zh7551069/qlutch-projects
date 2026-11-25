@@ -20,6 +20,16 @@ class FlowLogicTest {
     }
 
     @Test
+    fun skipFollowsTheServerNextStep() {
+        assertEquals(FlowRoute.HOME, FlowLogic.placeAfterSession(FlowLogic.NEXT_HOME, true).route)
+        val unfinished = FlowLogic.placeAfterSession(FlowLogic.NEXT_ONBOARDING, true)
+        assertEquals(FlowRoute.NICKNAME, unfinished.route)
+        assertFalse(unfinished.route == FlowRoute.HOME)
+        assertFalse(unfinished.route == FlowRoute.WAIT)
+        assertFalse(FlowLogic.canEnterHomeFromWait(mapGenerationComplete = false))
+    }
+
+    @Test
     fun h3RoutesStayAnImplementationHypothesis() {
         assertEquals(FlowRoute.NICKNAME, FlowLogic.placeAfterSession(FlowLogic.NEXT_ONBOARDING, false).route)
         assertEquals(FlowRoute.PERMISSIONS_CONTACTS, FlowLogic.placeAfterSession(FlowLogic.NEXT_FIRST_PACK, false).route)

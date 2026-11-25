@@ -42,6 +42,10 @@ export class IdentityApi {
     return this.call('GET', '/v1/identity/onboarding', '', '', bearer)
   }
 
+  skipFirstPack(key: string, bearer: string): Promise<string> {
+    return this.call('POST', '/v1/knowledge/first-pack/skip', '{}', key, bearer)
+  }
+
   writeOnboarding(bearer: string, stepId: string, nickname: string, answer: string): Promise<string> {
     const payload: Record<string, string> = { 'step_id': stepId }
     if (nickname.length > 0) {

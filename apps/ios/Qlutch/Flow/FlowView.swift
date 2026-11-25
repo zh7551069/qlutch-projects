@@ -344,7 +344,13 @@ struct FlowView: View {
                 }
                 .padding(.top, 24)
                 Spacer()
-                SecondaryButton(label: "我没有材料", action: onHome)
+                if !error.isEmpty {
+                    Text(error)
+                        .font(qlutchFont("NotoSansSC-Regular", 13))
+                        .foregroundStyle(QlutchTone.footer)
+                        .padding(.horizontal, 16)
+                }
+                SecondaryButton(label: "我没有材料", enabled: !busy, action: skipNoMaterial)
                     .padding(.horizontal, 16).padding(.bottom, 34)
             }
             ClosedToast(visible: toast).padding(.bottom, 75)
@@ -584,6 +590,51 @@ struct FlowView: View {
             case .transport(let reason): error = reason
             }
         }
+    }
+
+    private func skipNoMaterial() {
+        guard !busy else { return }
+        busy = true
+        error = ""
+        let key = FlowLogic.newIdempotencyKey()
+        Task {
+            let outcome = await api.skipFirstPack(key: key, bearer: bearer)
+            await MainActor.run {
+                switch outcome {
+                case .ok(let body):
+                    applySkip(body.next_step)
+                case .err(_, let code):
+                    busy = false
+                    error = code
+                case .transport(let reason):
+                    busy = false
+                    error = reason
+                }
+            }
+        }
+    }
+
+    private func applySkip(_ nextStep: String) {
+        if nextStep == FlowLogic.nextOnboarding {
+            Task {
+                let state = await api.onboarding(bearer: bearer)
+                await MainActor.run {
+                    busy = false
+                    switch state {
+                    case .ok(let body):
+                        stack = []
+                        route = FlowLogic.placeForOnboarding(body.current_step_id)
+                    case .err(_, let code):
+                        error = code
+                    case .transport(let reason):
+                        error = reason
+                    }
+                }
+            }
+            return
+        }
+        busy = false
+        follow(nextStep)
     }
 
     private func follow(_ nextStep: String) {

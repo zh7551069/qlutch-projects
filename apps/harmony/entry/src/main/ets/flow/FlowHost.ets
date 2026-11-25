@@ -468,7 +468,17 @@ export struct FlowHost {
       }
       .margin({ top: 24 })
       Blank().layoutWeight(1)
-      SecondaryButton({ label: '我没有材料', onTap: () => { this.onHome() } })
+      if (this.errorText.length > 0) {
+        Text(this.errorText)
+          .fontSize(13)
+          .fontColor('#7C848F')
+          .margin({ bottom: 8 })
+      }
+      SecondaryButton({
+        label: '我没有材料',
+        enabled: !this.busy,
+        onTap: () => { this.skipNoMaterial() }
+      })
         .margin({ left: 16, right: 16, bottom: 34 })
     }
     .width('100%')
@@ -849,6 +859,50 @@ export struct FlowHost {
     } catch (_err) {
       this.push(next, stepIndex)
     }
+  }
+
+  private skipNoMaterial(): void {
+    if (this.busy) {
+      return
+    }
+    this.busy = true
+    this.errorText = ''
+    this.api.skipFirstPack(FlowLogic.newIdempotencyKey(), this.bearer).then((raw: string) => {
+      const status = statusOf(raw)
+      if (status === 200) {
+        this.applySkip(jsonField(raw, 'next_step'))
+        return
+      }
+      this.busy = false
+      this.errorText = errorCode(raw)
+    }).catch(() => {
+      this.busy = false
+      this.errorText = 'transport'
+    })
+  }
+
+  private applySkip(nextStep: string): void {
+    if (nextStep === FlowLogic.nextOnboarding) {
+      this.api.onboarding(this.bearer).then((raw: string) => {
+        this.busy = false
+        const status = statusOf(raw)
+        if (status >= 200 && status < 300) {
+          const place = FlowLogic.placeForOnboarding(jsonField(raw, 'current_step_id'))
+          this.stack = []
+          this.stepsStack = []
+          this.route = place.route
+          this.step = place.step
+          return
+        }
+        this.errorText = errorCode(raw)
+      }).catch(() => {
+        this.busy = false
+        this.errorText = 'transport'
+      })
+      return
+    }
+    this.busy = false
+    this.follow(nextStep)
   }
 
   private follow(nextStep: string): void {
