@@ -29,6 +29,23 @@ permissions:
 jobs:
   go:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        # Local Compose credentials from infra/local/compose.yaml. Not a production secret.
+        image: postgres:18.7
+        env:
+          POSTGRES_USER: qlutch
+          POSTGRES_PASSWORD: qlutch-local-dev
+          POSTGRES_DB: qlutch
+        ports:
+          - 4713:5432
+        options: >-
+          --health-cmd "pg_isready -U qlutch -d qlutch"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      QLUTCH_TEST_DATABASE_URL: postgres://qlutch:qlutch-local-dev@127.0.0.1:4713/qlutch?sslmode=disable
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7

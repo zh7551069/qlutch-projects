@@ -126,6 +126,13 @@ func TestIdentityRegisterLoginOnboardingAndProfile(t *testing.T) {
 	if updated.StatusCode != http.StatusOK || updated.Body.Region_code != "+852" || updated.Body.Locale != qlutchapi.LocaleZhHant {
 		t.Fatalf("region pref = %+v raw %s", updated.Body, updated.Raw)
 	}
+	wrongRegion := h.send(t, "login-other-region", "+852", phone, "login", nil)
+	if code := mustCode(t, wrongRegion.StatusCode, wrongRegion.Raw, wrongRegion.RequestID); code != "AUTH_ACCOUNT_NOT_FOUND" || wrongRegion.StatusCode != http.StatusNotFound {
+		t.Fatalf("bound phone = %d %s", wrongRegion.StatusCode, code)
+	}
+	if len(h.sender.Codes()) != 1 {
+		t.Fatal("wrong region must not send sms")
+	}
 
 	h.clock.Advance(identity.DefaultSendCooldown)
 	loginSend := h.send(t, "login-1", "+86", phone, "login", nil)
@@ -136,7 +143,7 @@ func TestIdentityRegisterLoginOnboardingAndProfile(t *testing.T) {
 	if logged.Body.Account.Is_new_user || logged.Body.Next_step != qlutchapi.NextStepNEEDFIRSTPACK || logged.Body.Profile.Region_code != "+86" {
 		t.Fatalf("login = %+v", logged.Body)
 	}
-	if !h.svc.TestingSetFirstPack(logged.Body.Account.User_id, true) {
+	if !h.svc.TestingSetFirstPack(context.Background(), logged.Body.Account.User_id, true) {
 		t.Fatal("missing user")
 	}
 	home := h.refresh(t, logged.Body.Refresh_token, "")
