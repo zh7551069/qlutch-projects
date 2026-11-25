@@ -29,7 +29,7 @@ func TestHealthAndReadyUseGeneratedClient(t *testing.T) {
 		staticCheck{name: "database", err: nil},
 		staticCheck{name: "redis", err: nil},
 		staticCheck{name: "object_storage", err: nil},
-	})
+	}, nil)
 	httpSrv := httptest.NewServer(srv.Handler(nil))
 	t.Cleanup(httpSrv.Close)
 
@@ -59,7 +59,7 @@ func TestReadyzFailsClosed(t *testing.T) {
 		staticCheck{name: "database", err: errors.New("down")},
 		staticCheck{name: "redis"},
 		staticCheck{name: "object_storage"},
-	})
+	}, nil)
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
 	srv.Handler(nil).ServeHTTP(rec, req)
@@ -76,7 +76,7 @@ func TestRequestIDEchoAndTrace(t *testing.T) {
 		_ = provider.Shutdown(context.Background())
 	})
 
-	srv := New(nil)
+	srv := New(nil, nil)
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
 	req.Header.Set("X-Request-Id", "req-123")
@@ -97,7 +97,7 @@ func TestRequestIDEchoAndTrace(t *testing.T) {
 }
 
 func TestAuthPlaceholdersAreNotMountedButReject(t *testing.T) {
-	srv := New(nil)
+	srv := New(nil, nil)
 	for _, handler := range []http.Handler{srv.LearnerAuth(), srv.InternalAuth()} {
 		rec := httptest.NewRecorder()
 		req := httptest.NewRequest(http.MethodGet, "/unused", nil)
@@ -143,7 +143,7 @@ func attributeValue(span sdktrace.ReadOnlySpan, key string) string {
 }
 
 func TestHealthzBodyIsJSON(t *testing.T) {
-	srv := New(nil)
+	srv := New(nil, nil)
 	rec := httptest.NewRecorder()
 	srv.Handler(nil).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/healthz", nil))
 	body, _ := io.ReadAll(rec.Body)

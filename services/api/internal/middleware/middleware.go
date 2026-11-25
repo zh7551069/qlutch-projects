@@ -43,7 +43,7 @@ func Tracing(next http.Handler) http.Handler {
 	})
 }
 
-// CORS allows the configured admin origins to call the probe routes.
+// CORS allows the configured admin origins to call probes and learner identity routes.
 func CORS(origins []string, next http.Handler) http.Handler {
 	allowed := make(map[string]struct{}, len(origins))
 	for _, origin := range origins {
@@ -56,8 +56,8 @@ func CORS(origins []string, next http.Handler) http.Handler {
 		if _, ok := allowed[origin]; ok {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 			w.Header().Set("Vary", "Origin")
-			w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
-			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Request-Id, traceparent")
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, Idempotency-Key, X-Request-Id, traceparent")
 			w.Header().Set("Access-Control-Expose-Headers", "X-Request-Id")
 		}
 		if r.Method == http.MethodOptions {

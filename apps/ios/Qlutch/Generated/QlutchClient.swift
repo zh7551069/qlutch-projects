@@ -8,14 +8,217 @@ public struct APIResponse<Body: Decodable & Sendable>: Sendable {
     public let requestID: String
 }
 
-public struct HealthStatus: Decodable, Sendable {
+public enum QlutchJSON: Codable, Sendable {
+    case string(String)
+    case number(Double)
+    case bool(Bool)
+    case object([String: QlutchJSON])
+    case array([QlutchJSON])
+    case null
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        if container.decodeNil() {
+            self = .null
+            return
+        }
+        if let value = try? container.decode(Bool.self) {
+            self = .bool(value)
+            return
+        }
+        if let value = try? container.decode(Double.self) {
+            self = .number(value)
+            return
+        }
+        if let value = try? container.decode(String.self) {
+            self = .string(value)
+            return
+        }
+        if let value = try? container.decode([String: QlutchJSON].self) {
+            self = .object(value)
+            return
+        }
+        if let value = try? container.decode([QlutchJSON].self) {
+            self = .array(value)
+            return
+        }
+        throw DecodingError.dataCorruptedError(in: container, debugDescription: "unsupported JSON")
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        switch self {
+        case .string(let value):
+            try container.encode(value)
+        case .number(let value):
+            try container.encode(value)
+        case .bool(let value):
+            try container.encode(value)
+        case .object(let value):
+            try container.encode(value)
+        case .array(let value):
+            try container.encode(value)
+        case .null:
+            try container.encodeNil()
+        }
+    }
+}
+
+public typealias RegionCode = String
+public let RegionCodeValue86: RegionCode = "+86"
+public let RegionCodeValue852: RegionCode = "+852"
+
+public typealias Locale = String
+public let LocaleZhHans: Locale = "zh-Hans"
+public let LocaleZhHant: Locale = "zh-Hant"
+
+public typealias OtpPurpose = String
+public let OtpPurposeRegister: OtpPurpose = "register"
+public let OtpPurposeLogin: OtpPurpose = "login"
+
+public typealias NextStep = String
+public let NextStepNEEDONBOARDING: NextStep = "NEED_ONBOARDING"
+public let NextStepNEEDFIRSTPACK: NextStep = "NEED_FIRST_PACK"
+public let NextStepREADYHOME: NextStep = "READY_HOME"
+
+public typealias StepId = String
+public let StepIdNickname: StepId = "nickname"
+public let StepIdAge: StepId = "age"
+public let StepIdStudyOrWork: StepId = "study_or_work"
+public let StepIdIdentity: StepId = "identity"
+public let StepIdHowToAddress: StepId = "how_to_address"
+public let StepIdExamTrack: StepId = "exam_track"
+public let StepIdDailyTime: StepId = "daily_time"
+
+public struct HealthStatus: Codable, Sendable {
     public let status: String
 }
 
-public struct ReadyStatus: Decodable, Sendable {
+public struct ReadyStatus: Codable, Sendable {
     public let status: String
     public let checks: [String: String]?
 }
+
+public struct OtpSendRequest: Codable, Sendable {
+    public let region_code: RegionCode
+    public let phone_national: String
+    public let purpose: OtpPurpose
+    public let locale: Locale?
+}
+
+public struct OtpSendResponse: Codable, Sendable {
+    public let retry_after_seconds: Int
+    public let destination_hint: String?
+}
+
+public struct OtpVerifyRequest: Codable, Sendable {
+    public let region_code: RegionCode
+    public let phone_national: String
+    public let purpose: OtpPurpose
+    public let code: String
+    public let locale: Locale?
+}
+
+public struct SessionRefreshRequest: Codable, Sendable {
+    public let refresh_token: String
+}
+
+public struct SessionRevokeRequest: Codable, Sendable {
+    public let refresh_token: String?
+}
+
+public struct AccountSummary: Codable, Sendable {
+    public let user_id: String
+    public let is_new_user: Bool
+    public let onboarding_completed: Bool
+    public let has_first_pack: Bool
+}
+
+public struct IdentityProfile: Codable, Sendable {
+    public let locale: Locale
+    public let region_code: RegionCode
+}
+
+public struct IdentityProfileUpdate: Codable, Sendable {
+    public let locale: Locale?
+    public let region_code: RegionCode?
+}
+
+public struct SessionResponse: Codable, Sendable {
+    public let access_token: String
+    public let refresh_token: String
+    public let expires_in: Int
+    public let account: AccountSummary
+    public let next_step: NextStep
+    public let profile: IdentityProfile
+}
+
+public let OnboardingStepStateStatusPending = "pending"
+public let OnboardingStepStateStatusCompleted = "completed"
+public struct OnboardingStepState: Codable, Sendable {
+    public let step_id: StepId
+    public let index: Int
+    public let status: String
+    public let answer: String?
+}
+
+public let OnboardingStateCurrent_step_idNickname = "nickname"
+public let OnboardingStateCurrent_step_idAge = "age"
+public let OnboardingStateCurrent_step_idStudyOrWork = "study_or_work"
+public let OnboardingStateCurrent_step_idIdentity = "identity"
+public let OnboardingStateCurrent_step_idHowToAddress = "how_to_address"
+public let OnboardingStateCurrent_step_idExamTrack = "exam_track"
+public let OnboardingStateCurrent_step_idDailyTime = "daily_time"
+public struct OnboardingState: Codable, Sendable {
+    public let current_step_id: String?
+    public let current_index: Int
+    public let completed: Bool
+    public let nickname: String?
+    public let steps: [OnboardingStepState]
+    public let account: AccountSummary
+    public let next_step: NextStep
+}
+
+public struct OnboardingWriteRequest: Codable, Sendable {
+    public let step_id: StepId
+    public let nickname: String?
+    public let answer: String?
+}
+
+public struct ErrorBody: Codable, Sendable {
+    public let error: ErrorBodyError
+    public let request_id: String
+}
+
+public let ErrorBodyErrorCodeAUTHREQUIRED = "AUTH_REQUIRED"
+public let ErrorBodyErrorCodeAUTHEXPIRED = "AUTH_EXPIRED"
+public let ErrorBodyErrorCodeAUTHFORBIDDEN = "AUTH_FORBIDDEN"
+public let ErrorBodyErrorCodeAUTHWRONGREALM = "AUTH_WRONG_REALM"
+public let ErrorBodyErrorCodeAUTHACCOUNTNOTFOUND = "AUTH_ACCOUNT_NOT_FOUND"
+public let ErrorBodyErrorCodeAUTHACCOUNTEXISTS = "AUTH_ACCOUNT_EXISTS"
+public let ErrorBodyErrorCodeAUTHOTPINVALID = "AUTH_OTP_INVALID"
+public let ErrorBodyErrorCodeAUTHOTPEXPIRED = "AUTH_OTP_EXPIRED"
+public let ErrorBodyErrorCodeAUTHOTPMAXATTEMPTS = "AUTH_OTP_MAX_ATTEMPTS"
+public let ErrorBodyErrorCodeVALIDATIONINVALIDPHONE = "VALIDATION_INVALID_PHONE"
+public let ErrorBodyErrorCodeVALIDATIONUNSUPPORTEDREGION = "VALIDATION_UNSUPPORTED_REGION"
+public let ErrorBodyErrorCodeVALIDATIONUNSUPPORTEDLOCALE = "VALIDATION_UNSUPPORTED_LOCALE"
+public let ErrorBodyErrorCodeVALIDATIONINVALIDPURPOSE = "VALIDATION_INVALID_PURPOSE"
+public let ErrorBodyErrorCodeVALIDATIONINVALIDOTPFORMAT = "VALIDATION_INVALID_OTP_FORMAT"
+public let ErrorBodyErrorCodeVALIDATIONMISSINGFIELD = "VALIDATION_MISSING_FIELD"
+public let ErrorBodyErrorCodeVALIDATIONNICKNAME = "VALIDATION_NICKNAME"
+public let ErrorBodyErrorCodeVALIDATIONINVALIDSTEP = "VALIDATION_INVALID_STEP"
+public let ErrorBodyErrorCodeVALIDATIONINVALIDSTEPANSWER = "VALIDATION_INVALID_STEP_ANSWER"
+public let ErrorBodyErrorCodeVALIDATIONSTEPOUTOFORDER = "VALIDATION_STEP_OUT_OF_ORDER"
+public let ErrorBodyErrorCodeIDEMPOTENCYKEYMISMATCH = "IDEMPOTENCY_KEY_MISMATCH"
+public let ErrorBodyErrorCodeRATELIMITED = "RATE_LIMITED"
+public let ErrorBodyErrorCodeINTERNAL = "INTERNAL"
+public struct ErrorBodyError: Codable, Sendable {
+    public let code: String
+    public let message: String
+    public let details: QlutchJSON?
+}
+
+public struct Empty: Codable, Sendable {}
 
 public enum QlutchClientError: Error {
     case badURL
@@ -32,29 +235,103 @@ public struct QlutchClient: Sendable {
     }
 
     public func getHealth() async throws -> APIResponse<HealthStatus> {
-        try await request(method: "GET", path: "/healthz")
+        var header: [String: String] = [:]
+        
+        return try await request(method: "GET", path: "/healthz", body: nil, headers: header)
     }
 
     public func getReady() async throws -> APIResponse<ReadyStatus> {
-        try await request(method: "GET", path: "/readyz")
+        var header: [String: String] = [:]
+        
+        return try await request(method: "GET", path: "/readyz", body: nil, headers: header)
     }
 
-    private func request<T: Decodable>(method: String, path: String) async throws -> APIResponse<T> {
+    public func sendIdentityOtp(idempotencyKey: String, body: OtpSendRequest, requestID: String = "") async throws -> APIResponse<OtpSendResponse> {
+        let payload = try JSONEncoder().encode(body)
+        var header: [String: String] = [:]
+        if !idempotencyKey.isEmpty { header["Idempotency-Key"] = idempotencyKey }
+        if !requestID.isEmpty { header["X-Request-Id"] = requestID }
+        return try await request(method: "POST", path: "/v1/identity/otp/send", body: payload, headers: header)
+    }
+
+    public func verifyIdentityOtp(body: OtpVerifyRequest, requestID: String = "") async throws -> APIResponse<SessionResponse> {
+        let payload = try JSONEncoder().encode(body)
+        var header: [String: String] = [:]
+        if !requestID.isEmpty { header["X-Request-Id"] = requestID }
+        return try await request(method: "POST", path: "/v1/identity/otp/verify", body: payload, headers: header)
+    }
+
+    public func refreshIdentitySession(body: SessionRefreshRequest, requestID: String = "") async throws -> APIResponse<SessionResponse> {
+        let payload = try JSONEncoder().encode(body)
+        var header: [String: String] = [:]
+        if !requestID.isEmpty { header["X-Request-Id"] = requestID }
+        return try await request(method: "POST", path: "/v1/identity/session/refresh", body: payload, headers: header)
+    }
+
+    public func revokeIdentitySession(body: SessionRevokeRequest? = nil, requestID: String = "", bearer: String = "") async throws -> APIResponse<Empty> {
+        let payload: Data? = if let body { try JSONEncoder().encode(body) } else { nil }
+        var header: [String: String] = [:]
+        if !requestID.isEmpty { header["X-Request-Id"] = requestID }
+        if !bearer.isEmpty { header["Authorization"] = "Bearer \(bearer)" }
+        return try await request(method: "POST", path: "/v1/identity/session/revoke", body: payload, headers: header)
+    }
+
+    public func getIdentityOnboarding(requestID: String = "", bearer: String = "") async throws -> APIResponse<OnboardingState> {
+        var header: [String: String] = [:]
+        if !requestID.isEmpty { header["X-Request-Id"] = requestID }
+        if !bearer.isEmpty { header["Authorization"] = "Bearer \(bearer)" }
+        return try await request(method: "GET", path: "/v1/identity/onboarding", body: nil, headers: header)
+    }
+
+    public func putIdentityOnboarding(body: OnboardingWriteRequest, requestID: String = "", bearer: String = "") async throws -> APIResponse<OnboardingState> {
+        let payload = try JSONEncoder().encode(body)
+        var header: [String: String] = [:]
+        if !requestID.isEmpty { header["X-Request-Id"] = requestID }
+        if !bearer.isEmpty { header["Authorization"] = "Bearer \(bearer)" }
+        return try await request(method: "PUT", path: "/v1/identity/onboarding", body: payload, headers: header)
+    }
+
+    public func getIdentityProfile(requestID: String = "", bearer: String = "") async throws -> APIResponse<IdentityProfile> {
+        var header: [String: String] = [:]
+        if !requestID.isEmpty { header["X-Request-Id"] = requestID }
+        if !bearer.isEmpty { header["Authorization"] = "Bearer \(bearer)" }
+        return try await request(method: "GET", path: "/v1/identity/profile", body: nil, headers: header)
+    }
+
+    public func putIdentityProfile(body: IdentityProfileUpdate, requestID: String = "", bearer: String = "") async throws -> APIResponse<IdentityProfile> {
+        let payload = try JSONEncoder().encode(body)
+        var header: [String: String] = [:]
+        if !requestID.isEmpty { header["X-Request-Id"] = requestID }
+        if !bearer.isEmpty { header["Authorization"] = "Bearer \(bearer)" }
+        return try await request(method: "PUT", path: "/v1/identity/profile", body: payload, headers: header)
+    }
+
+    private func request<T: Decodable>(method: String, path: String, body: Data?, headers: [String: String]) async throws -> APIResponse<T> {
         let root = baseURL.absoluteString.hasSuffix("/") ? String(baseURL.absoluteString.dropLast()) : baseURL.absoluteString
         guard let url = URL(string: root + path) else {
             throw QlutchClientError.badURL
         }
-        var request = URLRequest(url: url)
-        request.httpMethod = method
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-        let (data, response) = try await session.data(for: request)
+        var outgoing = URLRequest(url: url)
+        outgoing.httpMethod = method
+        outgoing.setValue("application/json", forHTTPHeaderField: "Accept")
+        for (name, value) in headers {
+            outgoing.setValue(value, forHTTPHeaderField: name)
+        }
+        if let body {
+            outgoing.httpBody = body
+            outgoing.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        }
+        let (data, response) = try await session.data(for: outgoing)
         guard let http = response as? HTTPURLResponse else {
             throw QlutchClientError.notHTTP
         }
-        let body = try JSONDecoder().decode(T.self, from: data)
+        if http.statusCode == 204, let empty = (Empty() as Any) as? T {
+            return APIResponse(statusCode: http.statusCode, body: empty, requestID: http.value(forHTTPHeaderField: "X-Request-Id") ?? "")
+        }
+        let decoded = try JSONDecoder().decode(T.self, from: data)
         return APIResponse(
             statusCode: http.statusCode,
-            body: body,
+            body: decoded,
             requestID: http.value(forHTTPHeaderField: "X-Request-Id") ?? ""
         )
     }

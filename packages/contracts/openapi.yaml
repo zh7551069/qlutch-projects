@@ -1,21 +1,32 @@
 openapi: 3.0.3
 info:
   title: Qlutch API
-  version: 0.0.0
+  version: 0.1.0-C
   description: |
-    脚手架探针契约，只包含进程存活和依赖就绪。
-    平台路径、错误码和业务字段不在本文件定义。
+    在脚手架探针之上扩展新用户流程 A1 身份域。
+    平台约定见 I03；正文见《新用户流程 A1 身份契约》v0.1.0-C。
+    不包含知识域，不包含内部后管 API。
 servers:
   - url: http://127.0.0.1:4710
     description: 本地 API
+tags:
+  - name: Health
+  - name: Identity
+security:
+  - BearerAuth: []
 paths:
   /healthz:
     get:
       operationId: getHealth
+      tags: [Health]
       summary: 进程存活
+      security: []
       responses:
         "200":
           description: 进程正在运行
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/XRequestId"
           content:
             application/json:
               schema:
@@ -23,21 +34,294 @@ paths:
   /readyz:
     get:
       operationId: getReady
+      tags: [Health]
       summary: 依赖就绪
+      security: []
       responses:
         "200":
           description: 依赖可达
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/XRequestId"
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ReadyStatus"
         "503":
           description: 依赖不可达
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/XRequestId"
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ReadyStatus"
+  /v1/identity/otp/send:
+    post:
+      operationId: sendIdentityOtp
+      tags: [Identity]
+      summary: 请求短信验证码
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/XRequestId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OtpSendRequest"
+      responses:
+        "200":
+          description: 已受理发码（含幂等重放的相同结果）
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OtpSendResponse"
+        "400":
+          $ref: "#/components/responses/Error400"
+        "404":
+          $ref: "#/components/responses/Error404"
+        "409":
+          $ref: "#/components/responses/Error409"
+        "429":
+          $ref: "#/components/responses/Error429"
+        "500":
+          $ref: "#/components/responses/Error500"
+  /v1/identity/otp/verify:
+    post:
+      operationId: verifyIdentityOtp
+      tags: [Identity]
+      summary: 校验验证码并建会话
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/XRequestId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OtpVerifyRequest"
+      responses:
+        "200":
+          description: 校验成功，返回会话与下一步
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionResponse"
+        "400":
+          $ref: "#/components/responses/Error400"
+        "401":
+          $ref: "#/components/responses/Error401"
+        "403":
+          $ref: "#/components/responses/Error403"
+        "404":
+          $ref: "#/components/responses/Error404"
+        "409":
+          $ref: "#/components/responses/Error409"
+        "429":
+          $ref: "#/components/responses/Error429"
+        "500":
+          $ref: "#/components/responses/Error500"
+  /v1/identity/session/refresh:
+    post:
+      operationId: refreshIdentitySession
+      tags: [Identity]
+      summary: 刷新会话
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/XRequestId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SessionRefreshRequest"
+      responses:
+        "200":
+          description: 已签发新令牌
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionResponse"
+        "400":
+          $ref: "#/components/responses/Error400"
+        "401":
+          $ref: "#/components/responses/Error401"
+        "500":
+          $ref: "#/components/responses/Error500"
+  /v1/identity/session/revoke:
+    post:
+      operationId: revokeIdentitySession
+      tags: [Identity]
+      summary: 吊销当前会话
+      security:
+        - BearerAuth: []
+        - {}
+      parameters:
+        - $ref: "#/components/parameters/XRequestId"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SessionRevokeRequest"
+      responses:
+        "204":
+          description: 已吊销或本已失效
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/XRequestId"
+        "400":
+          $ref: "#/components/responses/Error400"
+        "401":
+          $ref: "#/components/responses/Error401"
+        "403":
+          $ref: "#/components/responses/Error403"
+        "500":
+          $ref: "#/components/responses/Error500"
+  /v1/identity/onboarding:
+    get:
+      operationId: getIdentityOnboarding
+      tags: [Identity]
+      summary: 读取建档 7 步进度
+      parameters:
+        - $ref: "#/components/parameters/XRequestId"
+      responses:
+        "200":
+          description: 当前进度
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OnboardingState"
+        "401":
+          $ref: "#/components/responses/Error401"
+        "403":
+          $ref: "#/components/responses/Error403"
+        "500":
+          $ref: "#/components/responses/Error500"
+    put:
+      operationId: putIdentityOnboarding
+      tags: [Identity]
+      summary: 写入当前建档步
+      parameters:
+        - $ref: "#/components/parameters/XRequestId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OnboardingWriteRequest"
+      responses:
+        "200":
+          description: 写入后的进度
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OnboardingState"
+        "400":
+          $ref: "#/components/responses/Error400"
+        "401":
+          $ref: "#/components/responses/Error401"
+        "403":
+          $ref: "#/components/responses/Error403"
+        "422":
+          $ref: "#/components/responses/Error422"
+        "500":
+          $ref: "#/components/responses/Error500"
+  /v1/identity/profile:
+    get:
+      operationId: getIdentityProfile
+      tags: [Identity]
+      summary: 读取语言与区号偏好
+      parameters:
+        - $ref: "#/components/parameters/XRequestId"
+      responses:
+        "200":
+          description: 当前偏好
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IdentityProfile"
+        "401":
+          $ref: "#/components/responses/Error401"
+        "403":
+          $ref: "#/components/responses/Error403"
+        "500":
+          $ref: "#/components/responses/Error500"
+    put:
+      operationId: putIdentityProfile
+      tags: [Identity]
+      summary: 更新语言与区号偏好
+      parameters:
+        - $ref: "#/components/parameters/XRequestId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/IdentityProfileUpdate"
+      responses:
+        "200":
+          description: 更新后的偏好
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IdentityProfile"
+        "400":
+          $ref: "#/components/responses/Error400"
+        "401":
+          $ref: "#/components/responses/Error401"
+        "403":
+          $ref: "#/components/responses/Error403"
+        "500":
+          $ref: "#/components/responses/Error500"
 components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: access_token
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        type: string
+        minLength: 1
+    XRequestId:
+      name: X-Request-Id
+      in: header
+      required: false
+      schema:
+        type: string
+  headers:
+    XRequestId:
+      required: true
+      schema:
+        type: string
   schemas:
     HealthStatus:
       type: object
@@ -57,3 +341,301 @@ components:
           type: object
           additionalProperties:
             type: string
+    RegionCode:
+      type: string
+      enum: ["+86", "+852"]
+    Locale:
+      type: string
+      enum: [zh-Hans, zh-Hant]
+    OtpPurpose:
+      type: string
+      enum: [register, login]
+    NextStep:
+      type: string
+      enum: [NEED_ONBOARDING, NEED_FIRST_PACK, READY_HOME]
+    StepId:
+      type: string
+      enum: [nickname, age, study_or_work, identity, how_to_address, exam_track, daily_time]
+    OtpSendRequest:
+      type: object
+      additionalProperties: false
+      required: [region_code, phone_national, purpose]
+      properties:
+        region_code:
+          $ref: "#/components/schemas/RegionCode"
+        phone_national:
+          type: string
+          pattern: "^[0-9]+$"
+          minLength: 1
+        purpose:
+          $ref: "#/components/schemas/OtpPurpose"
+        locale:
+          $ref: "#/components/schemas/Locale"
+    OtpSendResponse:
+      type: object
+      additionalProperties: false
+      required: [retry_after_seconds]
+      properties:
+        retry_after_seconds:
+          type: integer
+          minimum: 0
+        destination_hint:
+          type: string
+    OtpVerifyRequest:
+      type: object
+      additionalProperties: false
+      required: [region_code, phone_national, purpose, code]
+      properties:
+        region_code:
+          $ref: "#/components/schemas/RegionCode"
+        phone_national:
+          type: string
+          pattern: "^[0-9]+$"
+          minLength: 1
+        purpose:
+          $ref: "#/components/schemas/OtpPurpose"
+        code:
+          type: string
+          pattern: "^[0-9]{6}$"
+        locale:
+          $ref: "#/components/schemas/Locale"
+    SessionRefreshRequest:
+      type: object
+      additionalProperties: false
+      required: [refresh_token]
+      properties:
+        refresh_token:
+          type: string
+          minLength: 1
+    SessionRevokeRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        refresh_token:
+          type: string
+          minLength: 1
+    AccountSummary:
+      type: object
+      additionalProperties: false
+      required: [user_id, is_new_user, onboarding_completed, has_first_pack]
+      properties:
+        user_id:
+          type: string
+          minLength: 1
+        is_new_user:
+          type: boolean
+        onboarding_completed:
+          type: boolean
+        has_first_pack:
+          type: boolean
+    IdentityProfile:
+      type: object
+      additionalProperties: false
+      required: [locale, region_code]
+      properties:
+        locale:
+          $ref: "#/components/schemas/Locale"
+        region_code:
+          $ref: "#/components/schemas/RegionCode"
+    IdentityProfileUpdate:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        locale:
+          $ref: "#/components/schemas/Locale"
+        region_code:
+          $ref: "#/components/schemas/RegionCode"
+    SessionResponse:
+      type: object
+      additionalProperties: false
+      required: [access_token, refresh_token, expires_in, account, next_step, profile]
+      properties:
+        access_token:
+          type: string
+          minLength: 1
+        refresh_token:
+          type: string
+          minLength: 1
+        expires_in:
+          type: integer
+          minimum: 1
+        account:
+          $ref: "#/components/schemas/AccountSummary"
+        next_step:
+          $ref: "#/components/schemas/NextStep"
+        profile:
+          $ref: "#/components/schemas/IdentityProfile"
+    OnboardingStepState:
+      type: object
+      additionalProperties: false
+      required: [step_id, index, status]
+      properties:
+        step_id:
+          $ref: "#/components/schemas/StepId"
+        index:
+          type: integer
+          minimum: 1
+          maximum: 7
+        status:
+          type: string
+          enum: [pending, completed]
+        answer:
+          type: string
+          nullable: true
+    OnboardingState:
+      type: object
+      additionalProperties: false
+      required: [current_index, completed, steps, account, next_step]
+      properties:
+        current_step_id:
+          type: string
+          nullable: true
+          enum: [nickname, age, study_or_work, identity, how_to_address, exam_track, daily_time, null]
+        current_index:
+          type: integer
+          minimum: 1
+          maximum: 7
+        completed:
+          type: boolean
+        nickname:
+          type: string
+          nullable: true
+        steps:
+          type: array
+          minItems: 7
+          maxItems: 7
+          items:
+            $ref: "#/components/schemas/OnboardingStepState"
+        account:
+          $ref: "#/components/schemas/AccountSummary"
+        next_step:
+          $ref: "#/components/schemas/NextStep"
+    OnboardingWriteRequest:
+      type: object
+      additionalProperties: false
+      required: [step_id]
+      properties:
+        step_id:
+          $ref: "#/components/schemas/StepId"
+        nickname:
+          type: string
+          minLength: 1
+        answer:
+          type: string
+          minLength: 1
+    ErrorBody:
+      type: object
+      additionalProperties: false
+      required: [error, request_id]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              enum:
+                - AUTH_REQUIRED
+                - AUTH_EXPIRED
+                - AUTH_FORBIDDEN
+                - AUTH_WRONG_REALM
+                - AUTH_ACCOUNT_NOT_FOUND
+                - AUTH_ACCOUNT_EXISTS
+                - AUTH_OTP_INVALID
+                - AUTH_OTP_EXPIRED
+                - AUTH_OTP_MAX_ATTEMPTS
+                - VALIDATION_INVALID_PHONE
+                - VALIDATION_UNSUPPORTED_REGION
+                - VALIDATION_UNSUPPORTED_LOCALE
+                - VALIDATION_INVALID_PURPOSE
+                - VALIDATION_INVALID_OTP_FORMAT
+                - VALIDATION_MISSING_FIELD
+                - VALIDATION_NICKNAME
+                - VALIDATION_INVALID_STEP
+                - VALIDATION_INVALID_STEP_ANSWER
+                - VALIDATION_STEP_OUT_OF_ORDER
+                - IDEMPOTENCY_KEY_MISMATCH
+                - RATE_LIMITED
+                - INTERNAL
+            message:
+              type: string
+            details:
+              type: object
+              additionalProperties: true
+        request_id:
+          type: string
+  responses:
+    Error400:
+      description: 请求不合法
+      headers:
+        X-Request-Id:
+          $ref: "#/components/headers/XRequestId"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorBody"
+    Error401:
+      description: 未登录、令牌失效或验证码失败
+      headers:
+        X-Request-Id:
+          $ref: "#/components/headers/XRequestId"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorBody"
+    Error403:
+      description: 无权、错域或验证码次数用尽
+      headers:
+        X-Request-Id:
+          $ref: "#/components/headers/XRequestId"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorBody"
+    Error404:
+      description: 登录号码未注册
+      headers:
+        X-Request-Id:
+          $ref: "#/components/headers/XRequestId"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorBody"
+    Error409:
+      description: 注册号码已存在，或幂等键冲突
+      headers:
+        X-Request-Id:
+          $ref: "#/components/headers/XRequestId"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorBody"
+    Error422:
+      description: 建档字段或步骤不合法
+      headers:
+        X-Request-Id:
+          $ref: "#/components/headers/XRequestId"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorBody"
+    Error429:
+      description: 发码或验码被限流
+      headers:
+        X-Request-Id:
+          $ref: "#/components/headers/XRequestId"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorBody"
+    Error500:
+      description: 未分类的服务端失败
+      headers:
+        X-Request-Id:
+          $ref: "#/components/headers/XRequestId"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorBody"

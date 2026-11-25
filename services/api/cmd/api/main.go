@@ -15,6 +15,7 @@ import (
 	"github.com/zh7551069/qlutch-projects/services/airuntime"
 	"github.com/zh7551069/qlutch-projects/services/api/internal/auth"
 	"github.com/zh7551069/qlutch-projects/services/api/internal/config"
+	"github.com/zh7551069/qlutch-projects/services/api/internal/identity"
 	"github.com/zh7551069/qlutch-projects/services/api/internal/ready"
 	"github.com/zh7551069/qlutch-projects/services/api/internal/server"
 	"github.com/zh7551069/qlutch-projects/services/api/internal/telemetry"
@@ -49,11 +50,15 @@ func run(log *slog.Logger) error {
 
 	rt := airuntime.New()
 	log.Info("ai runtime", "status", rt.Status())
-	log.Info("auth placeholder", "learner", string(auth.DomainLearner), "internal", string(auth.DomainInternal), "state", "未配置")
+	learner, err := identity.New(identity.Options{})
+	if err != nil {
+		return err
+	}
+	log.Info("identity", "learner", "otp-session", "sms", "mock", "store", "memory", "internal", string(auth.DomainInternal))
 
 	srv := &http.Server{
 		Addr:              cfg.HTTPAddr,
-		Handler:           server.New(checks).Handler(cfg.CORSOrigins),
+		Handler:           server.New(checks, learner).Handler(cfg.CORSOrigins),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 	errCh := make(chan error, 1)
