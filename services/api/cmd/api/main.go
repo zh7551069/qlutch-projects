@@ -16,6 +16,7 @@ import (
 	"github.com/zh7551069/qlutch-projects/services/api/internal/auth"
 	"github.com/zh7551069/qlutch-projects/services/api/internal/config"
 	"github.com/zh7551069/qlutch-projects/services/api/internal/identity"
+	"github.com/zh7551069/qlutch-projects/services/api/internal/knowledge"
 	"github.com/zh7551069/qlutch-projects/services/api/internal/ready"
 	"github.com/zh7551069/qlutch-projects/services/api/internal/server"
 	"github.com/zh7551069/qlutch-projects/services/api/internal/telemetry"
@@ -53,13 +54,31 @@ func run(log *slog.Logger) error {
 	defer pool.Close()
 	migCtx, migCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	store, err := identity.OpenPostgres(migCtx, pool, "")
-	migCancel()
 	if err != nil {
+		migCancel()
 		log.Error("identity", "reason", "schema was not created")
 		return errors.New("identity store unavailable")
 	}
-	checks, closeDeps := openChecks(cfg, pool)
-	defer closeDeps()
+	knowledgeStore, err := knowledge.OpenPostgres(migCtx, pool, "")
+	migCancel()
+	if err != nil {
+		log.Error("knowledge", "reason", "schema was not created")
+		return errors.New("knowledge store unavailable")
+	}
+	redis.SetLogger(quietRedisLog{})
+	redisClient := redis.NewClient(&redis.Options{Addr: cfg.RedisAddr})
+	defer func() { _ = redisClient.Close() }()
+	checks := []ready.Pinger{
+		ready.Postgres{Pool: pool},
+		ready.Redis{Client: redisClient},
+		ready.ObjectStore{
+			Endpoint:  cfg.S3Endpoint,
+			Region:    cfg.S3Region,
+			Bucket:    cfg.S3Bucket,
+			AccessKey: cfg.S3AccessKey,
+			Secret:    cfg.S3SecretKey,
+		},
+	}
 
 	rt := airuntime.New()
 	log.Info("ai runtime", "status", rt.Status())
@@ -67,11 +86,27 @@ func run(log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	know, err := knowledge.New(knowledge.Options{
+		Identity: learner,
+		Store:    knowledgeStore,
+		Blobs: knowledge.S3Store{
+			Endpoint:  cfg.S3Endpoint,
+			Region:    cfg.S3Region,
+			Bucket:    cfg.S3Bucket,
+			AccessKey: cfg.S3AccessKey,
+			Secret:    cfg.S3SecretKey,
+		},
+		Queue: knowledge.RedisQueue{Client: redisClient, Key: cfg.WorkerQueue},
+	})
+	if err != nil {
+		return err
+	}
 	log.Info("identity", "learner", "otp-session", "sms", "mock", "store", "postgres", "internal", string(auth.DomainInternal))
+	log.Info("knowledge", "store", "postgres", "blobs", "s3", "queue", cfg.WorkerQueue)
 
 	srv := &http.Server{
 		Addr:              cfg.HTTPAddr,
-		Handler:           server.New(checks, learner).Handler(cfg.CORSOrigins),
+		Handler:           server.NewWithKnowledge(checks, learner, know).Handler(cfg.CORSOrigins),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 	errCh := make(chan error, 1)
@@ -98,20 +133,3 @@ func run(log *slog.Logger) error {
 type quietRedisLog struct{}
 
 func (quietRedisLog) Printf(context.Context, string, ...interface{}) {}
-
-func openChecks(cfg config.Config, pool *pgxpool.Pool) ([]ready.Pinger, func()) {
-	redis.SetLogger(quietRedisLog{})
-	redisClient := redis.NewClient(&redis.Options{Addr: cfg.RedisAddr})
-	checks := []ready.Pinger{
-		ready.Postgres{Pool: pool},
-		ready.Redis{Client: redisClient},
-		ready.ObjectStore{
-			Endpoint:  cfg.S3Endpoint,
-			Region:    cfg.S3Region,
-			Bucket:    cfg.S3Bucket,
-			AccessKey: cfg.S3AccessKey,
-			Secret:    cfg.S3SecretKey,
-		},
-	}
-	return checks, func() { _ = redisClient.Close() }
-}

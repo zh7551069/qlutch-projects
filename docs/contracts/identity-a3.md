@@ -13,7 +13,7 @@ PostgreSQL 保存：
 
 `PUT /v1/identity/profile` 只更新偏好。绑定登录号码不变。用偏好里的新区号去登录，找不到这个账号。
 
-`has_first_pack` 仍只由测试夹具写入，身份域没有知识包接口。
+`has_first_pack` 存在 `identity_accounts`。身份 HTTP 不写它。知识域在首次导入作业进入 `map_ready`，或 `POST /v1/knowledge/first-pack/skip` 成功时，把它置为 true。测试夹具仍可以直接设置。跳过记录在知识域表，见 `knowledge-a4.md`。
 
 ## 重启后不在
 

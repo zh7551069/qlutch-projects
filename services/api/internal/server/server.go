@@ -10,24 +10,43 @@ import (
 
 	"github.com/zh7551069/qlutch-projects/services/api/internal/auth"
 	"github.com/zh7551069/qlutch-projects/services/api/internal/identity"
+	"github.com/zh7551069/qlutch-projects/services/api/internal/knowledge"
 	"github.com/zh7551069/qlutch-projects/services/api/internal/middleware"
 	"github.com/zh7551069/qlutch-projects/services/api/internal/ready"
 )
 
-// Server is the public HTTP surface. Learner identity routes are mounted.
+// Server is the public HTTP surface. Learner identity and knowledge routes are mounted.
 // The internal-domain middleware stays unmounted until that contract exists.
 type Server struct {
 	checks   []ready.Pinger
 	ident    *identity.Service
+	know     *knowledge.Service
 	learner  http.Handler
 	internal http.Handler
 }
 
 // New builds the public handler. A nil identity service gets an in-memory OTP service.
+// Knowledge state for that service stays in memory. Production uses NewWithKnowledge.
 func New(checks []ready.Pinger, sessions *identity.Service) *Server {
+	return newServer(checks, sessions, nil)
+}
+
+// NewWithKnowledge builds the public handler with a caller-owned knowledge service.
+func NewWithKnowledge(checks []ready.Pinger, sessions *identity.Service, know *knowledge.Service) *Server {
+	return newServer(checks, sessions, know)
+}
+
+func newServer(checks []ready.Pinger, sessions *identity.Service, know *knowledge.Service) *Server {
 	if sessions == nil {
 		var err error
 		sessions, err = identity.New(identity.Options{})
+		if err != nil {
+			panic(err)
+		}
+	}
+	if know == nil {
+		var err error
+		know, err = knowledge.New(knowledge.Options{Identity: sessions})
 		if err != nil {
 			panic(err)
 		}
@@ -36,6 +55,7 @@ func New(checks []ready.Pinger, sessions *identity.Service) *Server {
 	return &Server{
 		checks:   checks,
 		ident:    sessions,
+		know:     know,
 		learner:  auth.Require(auth.DomainLearner, auth.Unconfigured{}, next),
 		internal: auth.Require(auth.DomainInternal, auth.Unconfigured{}, next),
 	}
@@ -47,6 +67,7 @@ func (s *Server) Handler(origins []string) http.Handler {
 	mux.HandleFunc("GET /healthz", s.healthz)
 	mux.HandleFunc("GET /readyz", s.readyz)
 	identity.Mount(mux, s.ident)
+	knowledge.Mount(mux, s.know)
 	return middleware.RequestID(middleware.Tracing(middleware.CORS(origins, mux)))
 }
 

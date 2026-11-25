@@ -14,6 +14,7 @@ type Config struct {
 	S3Bucket     string
 	S3AccessKey  string
 	S3SecretKey  string
+	WorkerQueue  string
 	OTLPEndpoint string
 	CORSOrigins  []string
 }
@@ -31,6 +32,7 @@ func Load() Config {
 		S3Bucket:     env("QLUTCH_S3_BUCKET", "qlutch-local"),
 		S3AccessKey:  env("QLUTCH_S3_ACCESS_KEY", "qlutch"),
 		S3SecretKey:  env("QLUTCH_S3_SECRET_KEY", "qlutch-local-dev"),
+		WorkerQueue:  env("QLUTCH_WORKER_QUEUE", "qlutch:worker:jobs"),
 		OTLPEndpoint: env("QLUTCH_OTLP_ENDPOINT", ""),
 		CORSOrigins:  splitCSV(env("QLUTCH_CORS_ORIGINS", "http://127.0.0.1:4712,http://localhost:4712")),
 	}
