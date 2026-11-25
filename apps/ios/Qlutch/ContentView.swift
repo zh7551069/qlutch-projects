@@ -10,8 +10,31 @@ enum ShellTab: Hashable {
 
 struct RootView: View {
     @State private var health = "尚未检查"
+    @State private var phase = "splash"
+    @State private var purpose = FlowLogic.purposeRegister
 
     var body: some View {
+        Group {
+            if phase == "splash" {
+                SplashView { phase = "welcome" }
+            } else if phase == "welcome" {
+                WelcomeView(
+                    onStart: { purpose = FlowLogic.purposeRegister; phase = "flow" },
+                    onExisting: { purpose = FlowLogic.purposeLogin; phase = "flow" }
+                )
+            } else if phase == "flow" {
+                FlowView(
+                    purpose: purpose,
+                    onHome: { phase = "home" },
+                    onLeave: { phase = "welcome" }
+                )
+            } else {
+                shell
+            }
+        }
+    }
+
+    private var shell: some View {
         TabView {
             PlaceholderPage(title: "首页", health: health)
                 .tabItem { Label("首页", systemImage: "house") }

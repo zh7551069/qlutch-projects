@@ -550,8 +550,8 @@ class SplashBehaviorTest {
         val colors = moduleFile("src/main/res/values/colors.xml").readText()
         assertTrue(colors.contains("<color name=\"splash_brand\">#6C5CE7</color>"))
         val font = moduleFile("src/main/res/font/noto_sans_sc_medium.ttf").readBytes()
-        assertEquals(4608, font.size)
-        assertEquals("25ca7ae4b4919637b77ffdf9756b868ec3b2af20e41cce87b4b49f8541d769e5", sha256(font))
+        assertEquals(149156, font.size)
+        assertEquals("e178406bd3bab288d2b9c0d3f3d9206fe8ab3789e5e4f0c145bd54d18e572e75", sha256(font))
     }
 
     @Test

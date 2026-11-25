@@ -11,6 +11,18 @@
     {
       "name": "ability_label",
       "value": "Qlutch"
+    },
+    {
+      "name": "camera_reason",
+      "value": "拍摄教材或课件"
+    },
+    {
+      "name": "contacts_reason",
+      "value": "帮你找到也在用的同学"
+    },
+    {
+      "name": "location_reason",
+      "value": "定位只用来找附近的学校或同学"
     }
   ]
 }

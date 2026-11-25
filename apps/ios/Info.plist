@@ -11,5 +11,19 @@
 	</dict>
 	<key>UILaunchScreen</key>
 	<dict/>
+	<key>NSCameraUsageDescription</key>
+	<string>拍摄教材或课件</string>
+	<key>NSContactsUsageDescription</key>
+	<string>帮你找到也在用的同学</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>定位只用来找附近的学校或同学</string>
+	<key>UIAppFonts</key>
+	<array>
+		<string>fonts/noto_sans_sc_regular.ttf</string>
+		<string>fonts/noto_sans_sc_medium.ttf</string>
+		<string>fonts/noto_sans_sc_semibold.ttf</string>
+		<string>fonts/noto_sans_sc_extrabold.ttf</string>
+		<string>fonts/inter_extrabold.ttf</string>
+	</array>
 </dict>
 </plist>
