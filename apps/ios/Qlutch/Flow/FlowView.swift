@@ -31,8 +31,8 @@ struct FlowView: View {
     @State private var search = ""
     @State private var toast = false
     @State private var waitStart: Date?
-    @State private var now = Date()
     @State private var releasedHome = false
+    @State private var waitEntry = 0
     @State private var showImporter = false
     @StateObject private var location = LocationAsk()
 
@@ -372,12 +372,12 @@ struct FlowView: View {
     }
 
     private var wait: some View {
-        let elapsed = waitStart.map { now.timeIntervalSince($0) * 1000 } ?? 0
-        return VStack(spacing: 0) {
+        VStack(spacing: 0) {
             FlowTopBar(step: 7, onBack: back)
             PromptRow(title: FlowLogic.waitTitle, subtitle: FlowLogic.waitCaption)
             Spacer()
             ReadingStage()
+                .id(waitEntry)
             Text(FlowLogic.waitFootnote)
                 .font(qlutchFont("NotoSansSC-SemiBold", 16))
                 .foregroundStyle(QlutchTone.slate)
@@ -390,20 +390,18 @@ struct FlowView: View {
                 .overlay(alignment: .leading) {
                     Capsule()
                         .fill(LinearGradient(colors: [QlutchTone.brand, Color(red: 210 / 255, green: 68 / 255, blue: 238 / 255)], startPoint: .leading, endPoint: .trailing))
-                        .frame(width: 248 * FlowLogic.mapFraction(elapsed), height: 8)
+                        .frame(width: 248 * FlowLogic.waitMeterFraction(), height: 8)
                 }
                 .padding(.top, 20)
             Spacer()
         }
         .onAppear {
-            if waitStart == nil { waitStart = Date() }
+            waitStart = Date()
+            releasedHome = false
         }
-        .onReceive(Timer.publish(every: 0.05, on: .main, in: .common).autoconnect()) { date in
-            now = date
-            if !releasedHome, let waitStart, FlowLogic.mapGateOpen(date.timeIntervalSince(waitStart) * 1000) {
-                releasedHome = true
-                onHome()
-            }
+        .onDisappear {
+            waitStart = nil
+            releasedHome = false
         }
     }
 
@@ -485,7 +483,14 @@ struct FlowView: View {
         .frame(width: width, height: height)
     }
 
+    private func resetWaitSession() {
+        waitStart = nil
+        releasedHome = false
+        waitEntry += 1
+    }
+
     private func push(_ next: FlowRoute) {
+        if case .wait = next { resetWaitSession() }
         stack.append(route)
         route = next
         error = ""
@@ -494,6 +499,7 @@ struct FlowView: View {
 
     private func back() {
         toast = false
+        if case .wait = route { resetWaitSession() }
         if stack.isEmpty { onLeave() } else {
             route = stack.removeLast()
         }

@@ -22,7 +22,9 @@ export class QuestionStep {
 }
 
 export class FlowLogic {
-  static readonly mapGateMillis: number = 2000
+  static readonly readingLoopMillis: number = 2000
+  static readonly waitMeterHold: number = 99
+  static readonly waitMeterTrack: number = 248
   static readonly regionMainland: string = '+86'
   static readonly regionHongKong: string = '+852'
   static readonly localeHans: string = 'zh-Hans'
@@ -125,18 +127,12 @@ export class FlowLogic {
     return notes.trim().length > 0
   }
 
-  static mapFraction(elapsed: number): number {
-    if (elapsed <= 0) {
-      return 0
-    }
-    if (elapsed >= FlowLogic.mapGateMillis) {
-      return 1
-    }
-    return elapsed / FlowLogic.mapGateMillis
+  static canEnterHomeFromWait(mapGenerationComplete: boolean): boolean {
+    return mapGenerationComplete
   }
 
-  static mapGateOpen(elapsed: number): boolean {
-    return elapsed >= FlowLogic.mapGateMillis
+  static waitMeterFraction(): number {
+    return FlowLogic.waitMeterHold / FlowLogic.waitMeterTrack
   }
 
   static placeAfterSession(nextStep: string, permissionsSeen: boolean): string {

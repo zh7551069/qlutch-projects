@@ -34,7 +34,11 @@ struct QuestionStep: Equatable {
 }
 
 enum FlowLogic {
-    static let mapGateMillis: Double = 2_000
+    /// One pass of the reading GIF. The clip loops; this is not a release gate.
+    static let readingLoopMillis: Double = 2_000
+    /// Bridge wait meter holds at 99 of 248. It does not fill to the end on a timer.
+    static let waitMeterHold: Double = 99
+    static let waitMeterTrack: Double = 248
     static let regionMainland = "+86"
     static let regionHongKong = "+852"
     static let localeHans = "zh-Hans"
@@ -106,11 +110,10 @@ enum FlowLogic {
         !notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    static func mapFraction(_ elapsed: Double) -> Double {
-        min(1, max(0, elapsed / mapGateMillis))
-    }
+    /// Home opens only after map generation reports complete. Elapsed time is not that signal.
+    static func canEnterHomeFromWait(mapGenerationComplete: Bool) -> Bool { mapGenerationComplete }
 
-    static func mapGateOpen(_ elapsed: Double) -> Bool { elapsed >= mapGateMillis }
+    static func waitMeterFraction() -> Double { waitMeterHold / waitMeterTrack }
 
     static func placeAfterSession(_ nextStep: String, permissionsSeen: Bool) -> FlowRoute {
         switch nextStep {

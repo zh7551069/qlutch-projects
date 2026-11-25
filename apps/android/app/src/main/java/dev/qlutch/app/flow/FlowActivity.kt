@@ -39,8 +39,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -147,12 +145,9 @@ private fun NewUserFlow(
     var sheet by remember { mutableStateOf("") }
     var search by remember { mutableStateOf("") }
     var toast by remember { mutableStateOf(false) }
-    var waitStarted by remember { mutableLongStateOf(0L) }
-    var now by remember { mutableLongStateOf(0L) }
 
     fun push(next: FlowPlace) {
         backStack = backStack + place
-        if (next.route == FlowRoute.WAIT) waitStarted = 0L
         place = next
         error = ""
         toast = false
@@ -166,7 +161,6 @@ private fun NewUserFlow(
 
     fun back() {
         toast = false
-        if (place.route == FlowRoute.WAIT) waitStarted = 0L
         if (backStack.isEmpty()) {
             onLeave()
         } else {
@@ -441,18 +435,7 @@ private fun NewUserFlow(
                     push(FlowPlace(FlowRoute.WAIT, stepIndex = 7, waitSource = FlowRoute.PASTE))
                 },
             )
-            FlowRoute.WAIT -> WaitScreen(
-                startedAt = waitStarted,
-                now = now,
-                onBack = { back() },
-                onArm = {
-                    val stamp = android.os.SystemClock.elapsedRealtime()
-                    waitStarted = stamp
-                    now = stamp
-                },
-                onTick = { now = android.os.SystemClock.elapsedRealtime() },
-                onFinished = { openHome() },
-            )
+            FlowRoute.WAIT -> WaitScreen(onBack = { back() })
             FlowRoute.HOME -> Unit
         }
         if (sheet == "region") {
@@ -1019,31 +1002,7 @@ private fun PasteScreen(notes: String, onNotes: (String) -> Unit, onBack: () -> 
 }
 
 @Composable
-private fun WaitScreen(
-    startedAt: Long,
-    now: Long,
-    onBack: () -> Unit,
-    onArm: () -> Unit,
-    onTick: () -> Unit,
-    onFinished: () -> Unit,
-) {
-    var armed by remember { mutableIntStateOf(0) }
-    LaunchedEffect(Unit) {
-        if (armed == 0) {
-            armed = 1
-            onArm()
-        }
-    }
-    LaunchedEffect(startedAt) {
-        if (startedAt == 0L) return@LaunchedEffect
-        while (!FlowLogic.mapGateOpen(android.os.SystemClock.elapsedRealtime() - startedAt)) {
-            onTick()
-            delay(50)
-        }
-        onTick()
-        onFinished()
-    }
-    val elapsed = if (startedAt == 0L) 0L else (now - startedAt).coerceAtLeast(0L)
+private fun WaitScreen(onBack: () -> Unit) {
     Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
         FlowTopBar(7, onBack)
         PromptRow(FlowLogic.WAIT_TITLE, FlowLogic.WAIT_CAPTION)
@@ -1073,7 +1032,7 @@ private fun WaitScreen(
                 modifier = Modifier.width(358.dp),
                 style = qlutchText(16, QlutchTone.slate, WelcomeType.notoSemiBold, FontWeight.SemiBold, lineSp = 22),
             )
-            WaitMeter(FlowLogic.mapFraction(elapsed))
+            WaitMeter(FlowLogic.waitMeterFraction())
         }
     }
 }
@@ -1094,6 +1053,9 @@ private fun ReadingGif(modifier: Modifier) {
                 setImageDrawable(drawable)
                 (drawable as? Animatable)?.start()
             }
+        },
+        onRelease = { view ->
+            (view.drawable as? Animatable)?.stop()
         },
     )
 }

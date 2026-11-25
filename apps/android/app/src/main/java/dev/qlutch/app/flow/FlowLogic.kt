@@ -8,9 +8,12 @@ import java.util.UUID
  * routing hypothesis already implemented by the identity service.
  */
 internal object FlowLogic {
-    const val MAP_GATE_MILLIS = 2_000L
+    /** Length of one pass of the reading GIF. Looping uses this; it does not open home. */
+    const val READING_LOOP_MILLIS = 2_000L
     const val PROGRESS_TRACK_DP = 318
+    /** Bridge wait meter is 248 wide with a 99-wide hold. It is not a countdown. */
     const val WAIT_TRACK_DP = 248
+    const val WAIT_METER_HOLD_DP = 99
 
     const val REGION_MAINLAND = "+86"
     const val REGION_HONG_KONG = "+852"
@@ -122,14 +125,16 @@ internal object FlowLogic {
         return kotlin.math.round(trackDp * clamped / 7f)
     }
 
-    fun mapFraction(elapsedMillis: Long, durationMillis: Long = MAP_GATE_MILLIS): Float {
-        if (durationMillis <= 0L) return 1f
-        val elapsed = elapsedMillis.coerceAtLeast(0L)
-        return (elapsed.toFloat() / durationMillis.toFloat()).coerceIn(0f, 1f)
-    }
+    /** Home opens only when map generation reports complete. Elapsed time is not that signal. */
+    fun canEnterHomeFromWait(mapGenerationComplete: Boolean): Boolean = mapGenerationComplete
 
-    fun mapGateOpen(elapsedMillis: Long, durationMillis: Long = MAP_GATE_MILLIS): Boolean {
-        return elapsedMillis >= durationMillis
+    fun waitMeterFraction(): Float = WAIT_METER_HOLD_DP.toFloat() / WAIT_TRACK_DP.toFloat()
+
+    /** Frame inside the looping 2s reading clip. The index wraps; it does not finish the wait. */
+    fun readingLoopFrame(elapsedMillis: Long, frameCount: Int = 50, frameMillis: Long = 40L): Int {
+        val count = frameCount.coerceAtLeast(1).toLong()
+        val frame = frameMillis.coerceAtLeast(1L)
+        return (elapsedMillis.coerceAtLeast(0L) / frame).mod(count).toInt()
     }
 
     fun placeAfterSession(nextStep: String, permissionsSeen: Boolean): FlowPlace {

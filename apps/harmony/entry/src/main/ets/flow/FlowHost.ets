@@ -43,11 +43,10 @@ export struct FlowHost {
   @State sheet: string = ''
   @State toast: boolean = false
   @State waitStart: number = 0
-  @State fraction: number = 0
+  @State waitEntry: number = 0
   private stack: string[] = []
   private stepsStack: number[] = []
   private api: IdentityApi = new IdentityApi(API_BASE_URL)
-  private waitTimer: number = -1
 
   aboutToAppear(): void {
     this.mode = this.purpose
@@ -59,9 +58,7 @@ export struct FlowHost {
 
   aboutToDisappear(): void {
     NavBus.back = () => false
-    if (this.waitTimer >= 0) {
-      clearInterval(this.waitTimer)
-    }
+    this.resetWaitSession()
   }
 
   build() {
@@ -521,6 +518,7 @@ export struct FlowHost {
           .width(358)
           .height(626)
           .objectFit(ImageFit.Contain)
+          .opacity(this.waitEntry >= 0 ? 1 : 1)
       }
       .width(358)
       .height(626)
@@ -533,7 +531,7 @@ export struct FlowHost {
         .margin({ top: 20 })
       Stack({ alignContent: Alignment.Start }) {
         Row().width(248).height(8).borderRadius(100).backgroundColor('#E1E8F0')
-        Row().width(248 * this.fraction).height(8).borderRadius(100)
+        Row().width(FlowLogic.waitMeterHold).height(8).borderRadius(100)
           .linearGradient({ angle: 90, colors: [['#6C5CE7', 0], ['#D244EE', 1]] })
       }
       .width(248)
@@ -544,7 +542,6 @@ export struct FlowHost {
     .width('100%')
     .height('100%')
     .alignItems(HorizontalAlign.Center)
-    .onAppear(() => { this.armWait() })
   }
 
   @Builder
@@ -685,15 +682,14 @@ export struct FlowHost {
     this.errorText = ''
     this.toast = false
     if (next === 'wait') {
-      this.armWait()
+      this.resetWaitSession()
     }
   }
 
   private back(): void {
     this.toast = false
-    if (this.route === 'wait' && this.waitTimer >= 0) {
-      clearInterval(this.waitTimer)
-      this.waitTimer = -1
+    if (this.route === 'wait') {
+      this.resetWaitSession()
     }
     if (this.stack.length === 0) {
       this.onLeave()
@@ -712,21 +708,9 @@ export struct FlowHost {
     }, 2000)
   }
 
-  private armWait(): void {
-    if (this.waitTimer >= 0) {
-      return
-    }
-    this.waitStart = Date.now()
-    this.fraction = 0
-    this.waitTimer = setInterval(() => {
-      const elapsed = Date.now() - this.waitStart
-      this.fraction = FlowLogic.mapFraction(elapsed)
-      if (FlowLogic.mapGateOpen(elapsed)) {
-        clearInterval(this.waitTimer)
-        this.waitTimer = -1
-        this.onHome()
-      }
-    }, 50)
+  private resetWaitSession(): void {
+    this.waitStart = 0
+    this.waitEntry = this.waitEntry + 1
   }
 
   private sendCode(pushOtp: boolean): void {
