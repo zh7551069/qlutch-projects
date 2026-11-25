@@ -348,15 +348,15 @@ class WelcomeBehaviorTest {
             sha256(File(fontDir, "inter_extrabold.ttf").readBytes()),
         )
         assertEquals(
-            "92a21de8c58402ec6b7134b7f630d5cdc8219784e6223571c7b652bbe926e076",
+            "9fc397596c7d7908c7b6e1f992d7f2d4ad9b2a4c0328e1730a3f6f5a3f5f0dc9",
             sha256(File(fontDir, "noto_sans_sc_extrabold.ttf").readBytes()),
         )
         assertEquals(
-            "df388bfa1b089668daf62d74cdbdd9713059c7cc48b5a4ad2ededc281a3bb035",
+            "2a3c245ec4e907a40d76bd448c35536ce24f8cf94e2575b8667cc8656256c8b6",
             sha256(File(fontDir, "noto_sans_sc_semibold.ttf").readBytes()),
         )
         assertEquals(
-            "a0c71ea499d1cd03b5bd0df2c07602c2f50fbc893cd7070e571f4214f6478db0",
+            "02164502387d433048804340d3b5bfd4ec8e99d4b4faa50d7e6968cb8bdcf7e2",
             sha256(File(fontDir, "noto_sans_sc_regular.ttf").readBytes()),
         )
         val type = welcomeSource("WelcomeType.kt")

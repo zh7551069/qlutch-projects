@@ -102,6 +102,12 @@ struct FlowView: View {
         return VStack(spacing: 0) {
             VStack(spacing: 0) {
                 bundledImage("wordmark_small", 111, 28).padding(.top, 48)
+                Text("把课件或教材上传给AI，挖掘知识点生成题卡，每天完成一组题卡或与好友PK抢答题卡，强化知识点记忆")
+                    .font(qlutchFont("NotoSansSC-Regular", 13))
+                    .foregroundStyle(QlutchTone.footer)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 358)
+                    .padding(.top, 12)
                 Text("开始吧！").font(qlutchFont("NotoSansSC-ExtraBold", 32)).foregroundStyle(QlutchTone.ink).padding(.top, 20)
                 HStack(spacing: 0) {
                     tab("注册", !login) { mode = FlowLogic.purposeRegister }

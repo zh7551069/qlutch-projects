@@ -707,6 +707,12 @@ private fun AuthScreen(
                 modifier = Modifier.width(111.dp).height(28.dp),
                 contentScale = ContentScale.Fit,
             )
+            Spacer(Modifier.height(12.dp))
+            Text(
+                "把课件或教材上传给AI，挖掘知识点生成题卡，每天完成一组题卡或与好友PK抢答题卡，强化知识点记忆",
+                modifier = Modifier.widthIn(max = 358.dp).fillMaxWidth(),
+                style = qlutchText(13, QlutchTone.footer, WelcomeType.notoRegular, FontWeight.Normal),
+            )
             Spacer(Modifier.height(20.dp))
             ScreenTitle("开始吧！")
             Spacer(Modifier.height(32.dp))
