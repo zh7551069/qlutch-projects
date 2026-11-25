@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/zh7551069/qlutch-projects/services/airuntime"
 	"github.com/zh7551069/qlutch-projects/services/api/internal/identity"
 )
 
@@ -25,6 +26,7 @@ type Options struct {
 	Now            func() time.Time
 	MaxBytes       int64
 	IdempotencyTTL time.Duration
+	Runtime        *airuntime.Runtime
 }
 
 // Service is the learner knowledge API.
@@ -37,6 +39,7 @@ type Service struct {
 	now      func() time.Time
 	maxBytes int64
 	idemTTL  time.Duration
+	runtime  *airuntime.Runtime
 }
 
 // New builds a knowledge service. Identity is required.
@@ -76,6 +79,7 @@ func New(opts Options) (*Service, error) {
 		now:      now,
 		maxBytes: maxBytes,
 		idemTTL:  idemTTL,
+		runtime:  opts.Runtime,
 	}, nil
 }
 

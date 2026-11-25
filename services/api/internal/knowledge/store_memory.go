@@ -7,12 +7,14 @@ import (
 )
 
 type memoryStore struct {
-	mu        sync.Mutex
-	packs     map[string]*pack
-	materials map[string]*material
-	jobs      map[string]*job
-	skips     map[string]time.Time
-	idem      map[string]*idemRow
+	mu         sync.Mutex
+	packs      map[string]*pack
+	materials  map[string]*material
+	jobs       map[string]*job
+	skips      map[string]time.Time
+	idem       map[string]*idemRow
+	maps       map[string][]mapNode
+	prefetches []prefetchRow
 }
 
 func newMemoryStore() *memoryStore {
@@ -22,6 +24,7 @@ func newMemoryStore() *memoryStore {
 		jobs:      map[string]*job{},
 		skips:     map[string]time.Time{},
 		idem:      map[string]*idemRow{},
+		maps:      map[string][]mapNode{},
 	}
 }
 
@@ -165,6 +168,91 @@ func (m *memoryStore) FindIdempotency(_ context.Context, userID, op, key string,
 	return cloneIdem(row), nil
 }
 
+func (m *memoryStore) ClaimJob(_ context.Context, id string) (*job, bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	item := m.jobs[id]
+	if item == nil {
+		return nil, false, nil
+	}
+	switch item.Status {
+	case statusAccepted:
+		item.Status = statusRunning
+		return cloneJob(item), false, nil
+	case statusRunning:
+		return cloneJob(item), false, nil
+	case statusMapReady, statusFailedRetryable, statusFailedTerminal:
+		return cloneJob(item), true, nil
+	default:
+		return nil, false, errStorage
+	}
+}
+
+func (m *memoryStore) FailJob(_ context.Context, id, status, message string) error {
+	if status != statusFailedRetryable && status != statusFailedTerminal {
+		return errConflict
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	item := m.jobs[id]
+	if item == nil {
+		return errNotFound
+	}
+	if item.Status != statusAccepted && item.Status != statusRunning {
+		return errConflict
+	}
+	item.Status = status
+	item.FailureCode = ""
+	item.FailureMessage = message
+	return nil
+}
+
+func (m *memoryStore) CommitMapReady(_ context.Context, jobID, userID string, nodes []mapNode) error {
+	if !enterableNodes(nodes) {
+		return errConflict
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	item := m.jobs[jobID]
+	if item == nil {
+		return errNotFound
+	}
+	if item.UserID != userID || item.Status != statusRunning {
+		return errConflict
+	}
+	copied := cloneNodes(nodes)
+	m.maps[item.PackID] = copied
+	item.Status = statusMapReady
+	item.FailureCode = ""
+	item.FailureMessage = ""
+	return nil
+}
+
+func (m *memoryStore) MapNodes(_ context.Context, packID string) ([]mapNode, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return cloneNodes(m.maps[packID]), nil
+}
+
+func (m *memoryStore) InsertPrefetch(_ context.Context, rows []prefetchRow) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.prefetches = append(m.prefetches, rows...)
+	return nil
+}
+
+func (m *memoryStore) CountPrefetch(_ context.Context, jobID string) (int, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	n := 0
+	for _, row := range m.prefetches {
+		if row.JobID == jobID {
+			n++
+		}
+	}
+	return n, nil
+}
+
 func idemKey(userID, op, key string) string { return userID + "\n" + op + "\n" + key }
 
 func activeStatus(status string) bool {
@@ -193,6 +281,15 @@ func cloneJob(in *job) *job {
 	}
 	out := *in
 	return &out
+}
+
+func cloneNodes(in []mapNode) []mapNode {
+	if in == nil {
+		return nil
+	}
+	out := make([]mapNode, len(in))
+	copy(out, in)
+	return out
 }
 
 func cloneIdem(in *idemRow) *idemRow {
