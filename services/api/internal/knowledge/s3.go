@@ -5,6 +5,7 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
+	"io"
 	"net/http"
 	"net/url"
 	"sort"
@@ -88,6 +89,47 @@ func (s S3Store) Stat(ctx context.Context, objectKey string) (int64, bool, error
 		return 0, false, errStorage
 	}
 	return resp.ContentLength, true, nil
+}
+
+// Read implements Blobs with a signed GET. The body is not logged.
+func (s S3Store) Read(ctx context.Context, objectKey string) ([]byte, bool, error) {
+	objectURL, err := s.objectURL(objectKey)
+	if err != nil {
+		return nil, false, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, objectURL.String(), nil)
+	if err != nil {
+		return nil, false, errStorage
+	}
+	req.Host = objectURL.Host
+	now := time.Now()
+	if s.Now != nil {
+		now = s.Now()
+	}
+	ready.SignS3Request(req, now, s.Region, s.AccessKey, s.Secret)
+	client := s.Client
+	if client == nil {
+		client = &http.Client{Timeout: 10 * time.Second}
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, false, errStorage
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, false, nil
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, false, errStorage
+	}
+	buf, err := io.ReadAll(io.LimitReader(resp.Body, DefaultMaxBytes+1))
+	if err != nil {
+		return nil, false, errStorage
+	}
+	if int64(len(buf)) > DefaultMaxBytes {
+		return nil, false, errStorage
+	}
+	return buf, true, nil
 }
 
 func (s S3Store) objectURL(objectKey string) (*url.URL, error) {

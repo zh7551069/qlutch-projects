@@ -26,6 +26,9 @@ type postgresStore struct {
 	jobs      string
 	skips     string
 	idem      string
+	nodes     string
+	prefetch  string
+	accounts  string
 }
 
 // OpenPostgres migrates knowledge tables into schema and returns a store.
@@ -48,6 +51,9 @@ func OpenPostgres(ctx context.Context, pool *pgxpool.Pool, schema string) (Store
 		jobs:      ident + ".knowledge_jobs",
 		skips:     ident + ".knowledge_first_pack_skips",
 		idem:      ident + ".knowledge_idempotency",
+		nodes:     ident + ".knowledge_map_nodes",
+		prefetch:  ident + ".knowledge_prefetch",
+		accounts:  ident + ".identity_accounts",
 	}
 	if err := store.migrate(ctx, ident); err != nil {
 		return nil, redactStoreErr(err)

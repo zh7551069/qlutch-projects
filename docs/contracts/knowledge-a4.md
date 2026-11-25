@@ -7,7 +7,7 @@ H3 仍是实施假设，不是已确认产品口径。A4-O2（预签名秒数、
 ## 写入
 
 - 创建空知识包、申请预签名、导入 `202` 都不把 `has_first_pack` 从 false 改成 true。
-- `has_first_pack` 置真只有两处：跳过接口成功，或导入作业进入 `map_ready`。HTTP 受理把作业写成 `accepted` 并入队，不把它写成 `map_ready`。`map_ready` 只出现在测试夹具里，留给以后的 A5。
+- `has_first_pack` 置真只有两处：跳过接口成功，或导入作业进入 `map_ready`。HTTP 受理把作业写成 `accepted` 并入队，不把它写成 `map_ready`。进入 `map_ready` 由 A5 worker 完成。`TestingSetJobStatus` 仍只给合同测试推进状态，不走生产路径。
 - 跳过不创建知识包，也不创建导入作业。建档未完成时 `next_step` 仍是 `NEED_ONBOARDING`。建档已完成时是 `READY_HOME`。
 - 已经 `has_first_pack=true` 再跳过：返回 200，标志保持 true，不删除已有知识包或作业。
 - `has_first_pack` 写在身份表。跳过另写 `knowledge_first_pack_skips`。两处都在 PostgreSQL，新进程能读回。
@@ -27,7 +27,7 @@ H3 仍是实施假设，不是已确认产品口径。A4-O2（预签名秒数、
 
 PostgreSQL 保存知识包、材料元数据（含服务端生成的对象键和可选展示文件名）、导入作业、跳过记录、导入与跳过的幂等键。材料字节不进库，也不进 API 响应。对象键不作为单独字段返回。文件名不参与对象键。
 
-导入成功后向 `QLUTCH_WORKER_QUEUE` 放入只含 `job_id` 的消息。现有工人进程仍把载荷当不透明字节收下，不改作业状态。
+导入成功后向 `QLUTCH_WORKER_QUEUE` 放入只含 `job_id` 的消息。API 不在这个请求里改作业状态。工人进程取出 `job_id` 后按 A5 迁移状态。
 
 同一学习者、同一幂等键、同一请求体重放时，导入返回当前作业，而不是受理当时的快照。因此作业后来进入 `map_ready` 后，重放仍能看到。
 

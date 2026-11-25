@@ -11,6 +11,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 	"github.com/zh7551069/qlutch-projects/services/airuntime"
+	"github.com/zh7551069/qlutch-projects/services/api/importworker"
 	"github.com/zh7551069/qlutch-projects/services/worker/internal/config"
 	"github.com/zh7551069/qlutch-projects/services/worker/internal/queue"
 )
@@ -27,12 +28,26 @@ func main() {
 
 	runtime := airuntime.New()
 	log.Info("ai runtime", "status", runtime.Status())
+	processor, err := importworker.Open(ctx, importworker.Config{
+		DatabaseURL: cfg.DatabaseURL,
+		Runtime:     runtime,
+		S3Endpoint:  cfg.S3Endpoint,
+		S3Region:    cfg.S3Region,
+		S3Bucket:    cfg.S3Bucket,
+		S3AccessKey: cfg.S3AccessKey,
+		S3Secret:    cfg.S3SecretKey,
+	})
+	if err != nil {
+		log.Error("import worker", "reason", "store unavailable")
+		os.Exit(1)
+	}
+	defer processor.Close()
 
 	redis.SetLogger(quietRedisLog{})
 	client := redis.NewClient(&redis.Options{Addr: cfg.RedisAddr})
 	defer func() { _ = client.Close() }()
 
-	err := queue.Run(ctx, queue.Options{
+	err = queue.Run(ctx, queue.Options{
 		Heartbeat: cfg.Heartbeat,
 		Log:       log,
 		Pop: func(ctx context.Context, timeout time.Duration) ([]byte, bool, error) {
@@ -48,9 +63,9 @@ func main() {
 			}
 			return []byte(values[1]), true, nil
 		},
-		Handle: func(context.Context, []byte) error { return nil },
-		OnRetry: func(_ context.Context, attempt int, err error) {
-			log.Warn("retry hook", "attempt", attempt, "err", err.Error())
+		Handle: processor.Handle,
+		OnRetry: func(_ context.Context, attempt int, _ error) {
+			log.Warn("retry hook", "attempt", attempt)
 		},
 	})
 	if err != nil {

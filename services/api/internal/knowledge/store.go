@@ -41,6 +41,25 @@ type job struct {
 	FailureMessage  string
 }
 
+type mapNode struct {
+	ID       string
+	PackID   string
+	JobID    string
+	ParentID string
+	Kind     string
+	Title    string
+	Position int
+}
+
+type prefetchRow struct {
+	ID       string
+	PackID   string
+	JobID    string
+	NodeID   string
+	Stem     string
+	Position int
+}
+
 type idemRow struct {
 	Hash       [32]byte
 	JobID      string
@@ -65,12 +84,19 @@ type Store interface {
 	SkipRecorded(ctx context.Context, userID string) (bool, error)
 	SaveIdempotency(ctx context.Context, userID, op, key string, row idemRow) error
 	FindIdempotency(ctx context.Context, userID, op, key string, now time.Time) (*idemRow, error)
+	ClaimJob(ctx context.Context, id string) (item *job, settled bool, err error)
+	FailJob(ctx context.Context, id, status, message string) error
+	CommitMapReady(ctx context.Context, jobID, userID string, nodes []mapNode) error
+	MapNodes(ctx context.Context, packID string) ([]mapNode, error)
+	InsertPrefetch(ctx context.Context, rows []prefetchRow) error
+	CountPrefetch(ctx context.Context, jobID string) (int, error)
 }
 
-// Blobs is an S3-compatible object store. Implementations must not log secrets.
+// Blobs is an S3-compatible object store. Implementations must not log secrets or object bytes.
 type Blobs interface {
 	PresignPut(ctx context.Context, objectKey, contentType string) (uploadURL string, headers map[string]string, expiresIn int64, err error)
 	Stat(ctx context.Context, objectKey string) (size int64, found bool, err error)
+	Read(ctx context.Context, objectKey string) (body []byte, found bool, err error)
 }
 
 // Enqueuer accepts an opaque job payload. The payload is a job id, not material bytes.
