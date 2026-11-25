@@ -39,6 +39,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -87,6 +88,7 @@ import dev.qlutch.app.ui.qlutchMedium
 import dev.qlutch.app.ui.qlutchText
 import dev.qlutch.app.welcome.WelcomeType
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import androidx.compose.material3.Text
 
 class FlowActivity : ComponentActivity() {
@@ -145,6 +147,10 @@ private fun NewUserFlow(
     var sheet by remember { mutableStateOf("") }
     var search by remember { mutableStateOf("") }
     var toast by remember { mutableStateOf(false) }
+    var jobId by remember { mutableStateOf("") }
+    var packId by remember { mutableStateOf("") }
+    var materialId by remember { mutableStateOf("") }
+    var waitGeneration by remember { mutableIntStateOf(0) }
 
     fun push(next: FlowPlace) {
         backStack = backStack + place
@@ -161,6 +167,7 @@ private fun NewUserFlow(
 
     fun back() {
         toast = false
+        if (place.route == FlowRoute.WAIT) resetWaitSession()
         if (backStack.isEmpty()) {
             onLeave()
         } else {
@@ -171,6 +178,86 @@ private fun NewUserFlow(
 
     fun openHome() {
         onHome()
+    }
+
+    fun resetWaitSession() {
+        jobId = ""
+        packId = ""
+        materialId = ""
+        waitGeneration += 1
+    }
+
+    fun openWait(source: FlowRoute, job: dev.qlutch.contract.KnowledgeJob) {
+        jobId = job.job_id
+        packId = job.pack_id
+        materialId = job.material_id
+        waitGeneration += 1
+        error = ""
+        push(FlowPlace(FlowRoute.WAIT, stepIndex = 7, waitSource = source))
+    }
+
+    fun showFailure(outcome: ApiOutcome<*>) {
+        busy = false
+        error = when (outcome) {
+            is ApiOutcome.Err -> outcome.code
+            is ApiOutcome.Transport -> outcome.reason
+            is ApiOutcome.Ok -> ""
+        }
+    }
+
+    fun submitMaterial(source: String, contentType: String, bytes: ByteArray, filename: String?, waitSource: FlowRoute) {
+        if (busy || bytes.isEmpty()) return
+        busy = true
+        error = ""
+        Thread {
+            val pack = api.createPack(bearer)
+            if (pack !is ApiOutcome.Ok) {
+                runOnUi { showFailure(pack) }
+                return@Thread
+            }
+            val upload = api.createUploadUrl(bearer, pack.value.pack_id, source, contentType, bytes.size.toLong(), filename)
+            if (upload !is ApiOutcome.Ok) {
+                runOnUi { showFailure(upload) }
+                return@Thread
+            }
+            val put = api.putMaterial(upload.value.upload_url, upload.value.upload_method, upload.value.upload_headers, bytes)
+            if (put !is ApiOutcome.Ok) {
+                runOnUi { showFailure(put) }
+                return@Thread
+            }
+            val job = api.createImport(FlowLogic.newIdempotencyKey(), bearer, upload.value.pack_id, upload.value.material_id)
+            runOnUi {
+                busy = false
+                when (job) {
+                    is ApiOutcome.Ok -> openWait(waitSource, job.value)
+                    is ApiOutcome.Err -> error = job.code
+                    is ApiOutcome.Transport -> error = job.reason
+                }
+            }
+        }.start()
+    }
+
+    fun retryImport() {
+        if (busy || packId.isEmpty() || materialId.isEmpty()) return
+        busy = true
+        error = ""
+        Thread {
+            val job = api.createImport(FlowLogic.newIdempotencyKey(), bearer, packId, materialId)
+            runOnUi {
+                busy = false
+                when (job) {
+                    is ApiOutcome.Ok -> {
+                        jobId = job.value.job_id
+                        packId = job.value.pack_id
+                        materialId = job.value.material_id
+                        waitGeneration += 1
+                        error = ""
+                    }
+                    is ApiOutcome.Err -> error = job.code
+                    is ApiOutcome.Transport -> error = job.reason
+                }
+            }
+        }.start()
     }
 
     fun skipFirstPack() {
@@ -458,14 +545,20 @@ private fun NewUserFlow(
                 },
             )
             FlowRoute.PACK -> PackScreen(
+                error = error,
+                busy = busy,
                 onBack = { back() },
-                onPhoto = { push(FlowPlace(FlowRoute.WAIT, stepIndex = 7, waitSource = FlowRoute.PACK)) },
+                onPhoto = { bytes ->
+                    submitMaterial("camera", "image/jpeg", bytes, null, FlowRoute.PACK)
+                },
                 onMore = { push(FlowPlace(FlowRoute.MORE, stepIndex = 7)) },
             )
             FlowRoute.MORE -> MoreScreen(
                 toast = toast,
                 onBack = { back() },
-                onUpload = { push(FlowPlace(FlowRoute.WAIT, stepIndex = 7, waitSource = FlowRoute.MORE)) },
+                onUpload = { bytes, type, name ->
+                    submitMaterial("file", type, bytes, name, FlowRoute.MORE)
+                },
                 onClosed = { toast = true },
                 onPaste = { push(FlowPlace(FlowRoute.PASTE, stepIndex = 7)) },
                 error = error,
@@ -474,14 +567,45 @@ private fun NewUserFlow(
             )
             FlowRoute.PASTE -> PasteScreen(
                 notes = notes,
+                error = error,
+                busy = busy,
                 onNotes = { notes = it },
                 onBack = { back() },
                 onContinue = {
                     if (!FlowLogic.notesContinueEnabled(notes)) return@PasteScreen
-                    push(FlowPlace(FlowRoute.WAIT, stepIndex = 7, waitSource = FlowRoute.PASTE))
+                    submitMaterial(
+                        "paste_note",
+                        "text/plain",
+                        notes.toByteArray(Charsets.UTF_8),
+                        null,
+                        FlowRoute.PASTE,
+                    )
                 },
             )
-            FlowRoute.WAIT -> WaitScreen(onBack = { back() })
+            FlowRoute.WAIT -> WaitScreen(
+                jobId = jobId,
+                generation = waitGeneration,
+                error = error,
+                busy = busy,
+                onBack = { back() },
+                onPoll = { api.getJob(bearer, jobId) },
+                onStatus = { status, failureCode, retryable ->
+                    if (place.route != FlowRoute.WAIT) return@WaitScreen
+                    if (FlowLogic.waitReleasesHome(status)) {
+                        openHome()
+                    } else if (FlowLogic.waitAllowsRetry(status, retryable)) {
+                        error = failureCode?.takeIf { it.isNotBlank() } ?: status
+                    } else if (status == FlowLogic.JOB_FAILED_TERMINAL) {
+                        error = failureCode?.takeIf { it.isNotBlank() } ?: status
+                    } else {
+                        error = ""
+                    }
+                },
+                onPollError = { code ->
+                    if (place.route == FlowRoute.WAIT) error = code
+                },
+                onRetry = { retryImport() },
+            )
             FlowRoute.HOME -> Unit
         }
         if (sheet == "region") {
@@ -941,10 +1065,22 @@ private fun PermissionLocationScreen(onBack: () -> Unit, onContinue: () -> Unit,
 }
 
 @Composable
-private fun PackScreen(onBack: () -> Unit, onPhoto: () -> Unit, onMore: () -> Unit) {
+private fun PackScreen(
+    error: String,
+    busy: Boolean,
+    onBack: () -> Unit,
+    onPhoto: (ByteArray) -> Unit,
+    onMore: () -> Unit,
+) {
     val context = LocalContext.current
+    val capture = rememberLauncherForActivityResult(ActivityResultContracts.TakePicturePreview()) { bitmap ->
+        if (bitmap == null) return@rememberLauncherForActivityResult
+        val stream = java.io.ByteArrayOutputStream()
+        bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 90, stream)
+        onPhoto(stream.toByteArray())
+    }
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) onPhoto()
+        if (granted) capture.launch(null)
     }
     Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
         FlowTopBar(7, onBack)
@@ -970,11 +1106,14 @@ private fun PackScreen(onBack: () -> Unit, onPhoto: () -> Unit, onMore: () -> Un
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             FooterNote("教材不用于训练模型")
-            PrimaryButton("拍照") {
-                val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
-                if (granted) onPhoto() else launcher.launch(Manifest.permission.CAMERA)
+            if (error.isNotEmpty()) {
+                Text(error, style = qlutchText(13, QlutchTone.footer, WelcomeType.notoRegular, FontWeight.Normal))
             }
-            SecondaryButton("更多导入方式", onClick = onMore)
+            PrimaryButton("拍照", enabled = !busy) {
+                val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+                if (granted) capture.launch(null) else launcher.launch(Manifest.permission.CAMERA)
+            }
+            SecondaryButton("更多导入方式", enabled = !busy, onClick = onMore)
         }
     }
 }
@@ -985,13 +1124,17 @@ private fun MoreScreen(
     error: String,
     busy: Boolean,
     onBack: () -> Unit,
-    onUpload: () -> Unit,
+    onUpload: (ByteArray, String, String?) -> Unit,
     onClosed: () -> Unit,
     onPaste: () -> Unit,
     onNoMaterial: () -> Unit,
 ) {
+    val context = LocalContext.current
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        if (uri != null) onUpload()
+        if (uri == null) return@rememberLauncherForActivityResult
+        val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return@rememberLauncherForActivityResult
+        val type = context.contentResolver.getType(uri) ?: "application/octet-stream"
+        onUpload(bytes, type, null)
     }
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -1042,21 +1185,65 @@ private fun MoreScreen(
 }
 
 @Composable
-private fun PasteScreen(notes: String, onNotes: (String) -> Unit, onBack: () -> Unit, onContinue: () -> Unit) {
+private fun PasteScreen(
+    notes: String,
+    error: String,
+    busy: Boolean,
+    onNotes: (String) -> Unit,
+    onBack: () -> Unit,
+    onContinue: () -> Unit,
+) {
     Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
         FlowTopBar(7, onBack)
         PromptRow("把笔记粘过来", "我会从里面挖掘知识点")
         Column(Modifier.weight(1f).padding(start = 16.dp, end = 16.dp, top = 24.dp)) {
             NotesField(notes, onNotes)
         }
-        Box(Modifier.padding(start = 16.dp, end = 16.dp, bottom = 34.dp)) {
-            PrimaryButton("继续", enabled = FlowLogic.notesContinueEnabled(notes), onClick = onContinue)
+        Column(
+            Modifier.padding(start = 16.dp, end = 16.dp, bottom = 34.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            if (error.isNotEmpty()) {
+                Text(error, style = qlutchText(13, QlutchTone.footer, WelcomeType.notoRegular, FontWeight.Normal))
+            }
+            PrimaryButton("继续", enabled = FlowLogic.notesContinueEnabled(notes) && !busy, onClick = onContinue)
         }
     }
 }
 
 @Composable
-private fun WaitScreen(onBack: () -> Unit) {
+private fun WaitScreen(
+    jobId: String,
+    generation: Int,
+    error: String,
+    busy: Boolean,
+    onBack: () -> Unit,
+    onPoll: () -> ApiOutcome<dev.qlutch.contract.KnowledgeJob>,
+    onStatus: (String, String?, Boolean) -> Unit,
+    onPollError: (String) -> Unit,
+    onRetry: () -> Unit,
+) {
+    var retryable by remember(generation) { mutableStateOf(false) }
+    LaunchedEffect(jobId, generation) {
+        if (jobId.isEmpty()) return@LaunchedEffect
+        while (isActive) {
+            val outcome = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { onPoll() }
+            if (!isActive) return@LaunchedEffect
+            when (outcome) {
+                is ApiOutcome.Ok -> {
+                    retryable = FlowLogic.waitAllowsRetry(outcome.value.status, outcome.value.retryable)
+                    onStatus(outcome.value.status, outcome.value.failure_code, outcome.value.retryable)
+                    val status = outcome.value.status
+                    if (FlowLogic.waitReleasesHome(status) || status == FlowLogic.JOB_FAILED_RETRYABLE || status == FlowLogic.JOB_FAILED_TERMINAL) {
+                        return@LaunchedEffect
+                    }
+                }
+                is ApiOutcome.Err -> onPollError(outcome.code)
+                is ApiOutcome.Transport -> onPollError(outcome.reason)
+            }
+            delay(FlowLogic.JOB_POLL_INTERVAL_MILLIS)
+        }
+    }
     Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
         FlowTopBar(7, onBack)
         PromptRow(FlowLogic.WAIT_TITLE, FlowLogic.WAIT_CAPTION)
@@ -1087,6 +1274,12 @@ private fun WaitScreen(onBack: () -> Unit) {
                 style = qlutchText(16, QlutchTone.slate, WelcomeType.notoSemiBold, FontWeight.SemiBold, lineSp = 22),
             )
             WaitMeter(FlowLogic.waitMeterFraction())
+            if (error.isNotEmpty()) {
+                Text(error, style = qlutchText(13, QlutchTone.footer, WelcomeType.notoRegular, FontWeight.Normal))
+            }
+            if (retryable) {
+                SecondaryButton("再试一次", enabled = !busy, onClick = onRetry)
+            }
         }
     }
 }

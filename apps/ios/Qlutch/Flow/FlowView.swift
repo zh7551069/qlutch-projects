@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import Contacts
 import UserNotifications
 import CoreLocation
@@ -33,6 +34,11 @@ struct FlowView: View {
     @State private var waitStart: Date?
     @State private var releasedHome = false
     @State private var waitEntry = 0
+    @State private var jobId = ""
+    @State private var packId = ""
+    @State private var materialId = ""
+    @State private var showCamera = false
+    @State private var waitRetryable = false
     @State private var showImporter = false
     @StateObject private var location = LocationAsk()
 
@@ -57,7 +63,20 @@ struct FlowView: View {
             if sheet == "language" { languageSheet }
         }
         .fileImporter(isPresented: $showImporter, allowedContentTypes: [.item]) { result in
-            if case .success = result { push(.wait(.more)) }
+            if case .success(let url) = result {
+                let started = url.startAccessingSecurityScopedResource()
+                defer { if started { url.stopAccessingSecurityScopedResource() } }
+                if let data = try? Data(contentsOf: url) {
+                    let type = url.pathExtension.isEmpty ? "application/octet-stream" : mimeType(url.pathExtension)
+                    submitMaterial(source: "file", contentType: type, bytes: data, filename: url.lastPathComponent, waitSource: .more)
+                }
+            }
+        }
+        .sheet(isPresented: $showCamera) {
+            CameraCapture { data in
+                showCamera = false
+                submitMaterial(source: "camera", contentType: "image/jpeg", bytes: data, filename: nil, waitSource: .pack)
+            }
         }
     }
 
@@ -311,7 +330,7 @@ struct FlowView: View {
             VStack(spacing: 16) {
                 PrimaryButton(label: "拍照") {
                     AVCaptureDevice.requestAccess(for: .video) { granted in
-                        if granted { DispatchQueue.main.async { push(.wait(.pack)) } }
+                        if granted { DispatchQueue.main.async { showCamera = true } }
                     }
                 }
                 SecondaryButton(label: "更多导入方式") { push(.more) }
@@ -372,7 +391,14 @@ struct FlowView: View {
                 .padding(.horizontal, 16)
                 .padding(.top, 24)
             Spacer()
-            PrimaryButton(label: "继续", enabled: FlowLogic.notesContinueEnabled(notes)) { push(.wait(.paste)) }
+            if !error.isEmpty {
+                Text(error)
+                    .font(qlutchFont("NotoSansSC-Regular", 13))
+                    .foregroundStyle(QlutchTone.footer)
+            }
+            PrimaryButton(label: "继续", enabled: FlowLogic.notesContinueEnabled(notes) && !busy) {
+                submitMaterial(source: "paste_note", contentType: "text/plain", bytes: Data(notes.utf8), filename: nil, waitSource: .paste)
+            }
                 .padding(.horizontal, 16).padding(.bottom, 34)
         }
     }
@@ -399,6 +425,17 @@ struct FlowView: View {
                         .frame(width: 248 * FlowLogic.waitMeterFraction(), height: 8)
                 }
                 .padding(.top, 20)
+            if !error.isEmpty {
+                Text(error)
+                    .font(qlutchFont("NotoSansSC-Regular", 13))
+                    .foregroundStyle(QlutchTone.footer)
+                    .padding(.top, 12)
+            }
+            if waitRetryable {
+                SecondaryButton(label: "再试一次", enabled: !busy, action: retryImport)
+                    .padding(.horizontal, 16)
+                    .padding(.top, 12)
+            }
             Spacer()
         }
         .onAppear {
@@ -408,6 +445,32 @@ struct FlowView: View {
         .onDisappear {
             waitStart = nil
             releasedHome = false
+            waitRetryable = false
+        }
+        .task(id: waitEntry) {
+            guard !jobId.isEmpty else { return }
+            while !Task.isCancelled {
+                let outcome = await api.getJob(bearer: bearer, jobId: jobId)
+                if Task.isCancelled { return }
+                switch outcome {
+                case .ok(let job):
+                    waitRetryable = FlowLogic.waitAllowsRetry(job.status, retryable: job.retryable)
+                    if FlowLogic.waitReleasesHome(job.status) {
+                        onHome()
+                        return
+                    }
+                    if job.status == FlowLogic.jobFailedRetryable || job.status == FlowLogic.jobFailedTerminal {
+                        error = (job.failure_code?.isEmpty == false) ? job.failure_code! : job.status
+                        return
+                    }
+                    error = ""
+                case .err(_, let code):
+                    error = code
+                case .transport(let reason):
+                    error = reason
+                }
+                try? await Task.sleep(nanoseconds: UInt64(FlowLogic.jobPollIntervalMillis * 1_000_000))
+            }
         }
     }
 
@@ -492,11 +555,22 @@ struct FlowView: View {
     private func resetWaitSession() {
         waitStart = nil
         releasedHome = false
+        waitRetryable = false
+        jobId = ""
+        packId = ""
+        materialId = ""
         waitEntry += 1
     }
 
+    private func openWait(source: FlowRoute, job: KnowledgeJob) {
+        resetWaitSession()
+        jobId = job.job_id
+        packId = job.pack_id
+        materialId = job.material_id
+        push(.wait(source))
+    }
+
     private func push(_ next: FlowRoute) {
-        if case .wait = next { resetWaitSession() }
         stack.append(route)
         route = next
         error = ""
@@ -589,6 +663,88 @@ struct FlowView: View {
             case .err(_, let code): error = code
             case .transport(let reason): error = reason
             }
+        }
+    }
+
+    private func submitMaterial(source: String, contentType: String, bytes: Data, filename: String?, waitSource: FlowRoute) {
+        guard !busy, !bytes.isEmpty else { return }
+        busy = true
+        error = ""
+        Task {
+            let pack = await api.createPack(bearer: bearer)
+            guard case .ok(let created) = pack else {
+                await MainActor.run { busy = false; error = callError(pack) }
+                return
+            }
+            let upload = await api.createUploadURL(bearer: bearer, packId: created.pack_id, source: source, contentType: contentType, byteSize: bytes.count, filename: filename)
+            guard case .ok(let ticket) = upload, let uploadURL = URL(string: ticket.upload_url) else {
+                await MainActor.run { busy = false; error = callError(upload) }
+                return
+            }
+            let put = await api.putMaterial(url: uploadURL, method: ticket.upload_method, headers: ticket.upload_headers, bytes: bytes)
+            guard case .ok = put else {
+                await MainActor.run { busy = false; error = callError(put) }
+                return
+            }
+            let job = await api.createImport(key: FlowLogic.newIdempotencyKey(), bearer: bearer, packId: ticket.pack_id, materialId: ticket.material_id)
+            await MainActor.run {
+                busy = false
+                if case .ok(let createdJob) = job {
+                    openWait(source: waitSource, job: createdJob)
+                } else {
+                    error = callError(job)
+                }
+            }
+        }
+    }
+
+    private func retryImport() {
+        guard !busy, !packId.isEmpty, !materialId.isEmpty else { return }
+        busy = true
+        error = ""
+        let key = FlowLogic.newIdempotencyKey()
+        Task {
+            let job = await api.createImport(key: key, bearer: bearer, packId: packId, materialId: materialId)
+            await MainActor.run {
+                busy = false
+                if case .ok(let created) = job {
+                    jobId = created.job_id
+                    packId = created.pack_id
+                    materialId = created.material_id
+                    waitRetryable = false
+                    error = ""
+                    waitEntry += 1
+                } else {
+                    error = callError(job)
+                }
+            }
+        }
+    }
+
+    private func callError<T>(_ result: CallResult<T>) -> String {
+        switch result {
+        case .ok: return ""
+        case .err(_, let code): return code
+        case .transport(let reason): return reason
+        }
+    }
+
+    private func mimeType(_ ext: String) -> String {
+        switch ext.lowercased() {
+        case "jpg", "jpeg": return "image/jpeg"
+        case "png": return "image/png"
+        case "webp": return "image/webp"
+        case "heic": return "image/heic"
+        case "pdf": return "application/pdf"
+        case "ppt": return "application/vnd.ms-powerpoint"
+        case "pptx": return "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+        case "doc": return "application/msword"
+        case "docx": return "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        case "mp3": return "audio/mpeg"
+        case "m4a": return "audio/mp4"
+        case "wav": return "audio/wav"
+        case "txt": return "text/plain"
+        default: return "application/octet-stream"
         }
     }
 
@@ -685,6 +841,34 @@ final class LocationAsk: NSObject, ObservableObject, CLLocationManagerDelegate {
         if manager.authorizationStatus != .notDetermined {
             done?()
             done = nil
+        }
+    }
+}
+
+private struct CameraCapture: UIViewControllerRepresentable {
+    let onImage: (Data) -> Void
+
+    func makeCoordinator() -> Coordinator { Coordinator(onImage: onImage) }
+
+    func makeUIViewController(context: Context) -> UIImagePickerController {
+        let picker = UIImagePickerController()
+        picker.sourceType = .camera
+        picker.delegate = context.coordinator
+        return picker
+    }
+
+    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
+
+    final class Coordinator: NSObject, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
+        let onImage: (Data) -> Void
+        init(onImage: @escaping (Data) -> Void) { self.onImage = onImage }
+        func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
+            let image = info[.originalImage] as? UIImage
+            let data = image?.jpegData(compressionQuality: 0.9) ?? Data()
+            onImage(data)
+        }
+        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+            onImage(Data())
         }
     }
 }

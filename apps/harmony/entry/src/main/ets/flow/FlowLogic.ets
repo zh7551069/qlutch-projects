@@ -23,6 +23,13 @@ export class QuestionStep {
 
 export class FlowLogic {
   static readonly readingLoopMillis: number = 2000
+  static readonly jobAccepted: string = 'accepted'
+  static readonly jobRunning: string = 'running'
+  static readonly jobMapReady: string = 'map_ready'
+  static readonly jobFailedRetryable: string = 'failed_retryable'
+  static readonly jobFailedTerminal: string = 'failed_terminal'
+  /** A4-O2 is still open. This poll interval is an implementation default, not a locked product number. */
+  static readonly jobPollIntervalMillis: number = 3000
   static readonly waitMeterHold: number = 99
   static readonly waitMeterTrack: number = 248
   static readonly regionMainland: string = '+86'
@@ -127,8 +134,12 @@ export class FlowLogic {
     return notes.trim().length > 0
   }
 
-  static canEnterHomeFromWait(mapGenerationComplete: boolean): boolean {
-    return mapGenerationComplete
+  static waitReleasesHome(status: string): boolean {
+    return status === FlowLogic.jobMapReady
+  }
+
+  static waitAllowsRetry(status: string, retryable: boolean): boolean {
+    return status === FlowLogic.jobFailedRetryable && retryable
   }
 
   static waitMeterFraction(): number {

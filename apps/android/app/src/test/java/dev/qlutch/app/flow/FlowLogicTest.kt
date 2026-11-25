@@ -26,7 +26,8 @@ class FlowLogicTest {
         assertEquals(FlowRoute.NICKNAME, unfinished.route)
         assertFalse(unfinished.route == FlowRoute.HOME)
         assertFalse(unfinished.route == FlowRoute.WAIT)
-        assertFalse(FlowLogic.canEnterHomeFromWait(mapGenerationComplete = false))
+        assertFalse(FlowLogic.waitReleasesHome(FlowLogic.JOB_ACCEPTED))
+        assertFalse(FlowLogic.waitReleasesHome(FlowLogic.JOB_RUNNING))
     }
 
     @Test
@@ -45,8 +46,16 @@ class FlowLogicTest {
         assertTrue(FlowLogic.otpContinueEnabled("123456"))
         assertFalse(FlowLogic.otpContinueEnabled("12345a"))
         assertEquals("138 0013 8000", FlowLogic.formatPhone("+86", "13800138000"))
-        assertFalse(FlowLogic.canEnterHomeFromWait(mapGenerationComplete = false))
-        assertTrue(FlowLogic.canEnterHomeFromWait(mapGenerationComplete = true))
+        assertTrue(FlowLogic.waitReleasesHome(FlowLogic.JOB_MAP_READY))
+        assertFalse(FlowLogic.waitReleasesHome(FlowLogic.JOB_ACCEPTED))
+        assertFalse(FlowLogic.waitReleasesHome(FlowLogic.JOB_RUNNING))
+        assertFalse(FlowLogic.waitReleasesHome(FlowLogic.JOB_FAILED_RETRYABLE))
+        assertFalse(FlowLogic.waitReleasesHome(FlowLogic.JOB_FAILED_TERMINAL))
+        assertFalse(FlowLogic.waitReleasesHome(""))
+        assertTrue(FlowLogic.waitAllowsRetry(FlowLogic.JOB_FAILED_RETRYABLE, true))
+        assertFalse(FlowLogic.waitAllowsRetry(FlowLogic.JOB_FAILED_TERMINAL, false))
+        assertFalse(FlowLogic.waitAllowsRetry(FlowLogic.JOB_FAILED_RETRYABLE, false))
+        assertFalse(FlowLogic.waitAllowsRetry(FlowLogic.JOB_ACCEPTED, false))
         assertEquals(0, FlowLogic.readingLoopFrame(0L))
         assertEquals(0, FlowLogic.readingLoopFrame(FlowLogic.READING_LOOP_MILLIS))
         assertEquals(1, FlowLogic.readingLoopFrame(FlowLogic.READING_LOOP_MILLIS + 40L))

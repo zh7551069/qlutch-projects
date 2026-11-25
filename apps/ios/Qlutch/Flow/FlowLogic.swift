@@ -36,6 +36,13 @@ struct QuestionStep: Equatable {
 enum FlowLogic {
     /// One pass of the reading GIF. The clip loops; this is not a release gate.
     static let readingLoopMillis: Double = 2_000
+    static let jobAccepted = "accepted"
+    static let jobRunning = "running"
+    static let jobMapReady = "map_ready"
+    static let jobFailedRetryable = "failed_retryable"
+    static let jobFailedTerminal = "failed_terminal"
+    /// A4-O2 is still open. This poll interval is an implementation default, not a locked product number.
+    static let jobPollIntervalMillis: Double = 3_000
     /// Bridge wait meter holds at 99 of 248. It does not fill to the end on a timer.
     static let waitMeterHold: Double = 99
     static let waitMeterTrack: Double = 248
@@ -110,8 +117,12 @@ enum FlowLogic {
         !notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    /// Home opens only after map generation reports complete. Elapsed time is not that signal.
-    static func canEnterHomeFromWait(mapGenerationComplete: Bool) -> Bool { mapGenerationComplete }
+    /// Home opens only when the job status is map_ready. Elapsed time is not that signal.
+    static func waitReleasesHome(_ status: String) -> Bool { status == jobMapReady }
+
+    static func waitAllowsRetry(_ status: String, retryable: Bool) -> Bool {
+        status == jobFailedRetryable && retryable
+    }
 
     static func waitMeterFraction() -> Double { waitMeterHold / waitMeterTrack }
 

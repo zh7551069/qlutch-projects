@@ -1,6 +1,7 @@
 import { abilityAccessCtrl, common, Permissions } from '@kit.AbilityKit'
+import { fileIo, picker } from '@kit.CoreFileKit'
 import { FlowLogic, QuestionStep } from './FlowLogic'
-import { IdentityApi, errorCode, jsonField, statusOf } from './IdentityApi'
+import { IdentityApi, errorCode, jsonField, jsonObject, statusOf } from './IdentityApi'
 import { API_BASE_URL } from '../config/ApiConfig'
 import {
   BackButton,
@@ -44,6 +45,11 @@ export struct FlowHost {
   @State toast: boolean = false
   @State waitStart: number = 0
   @State waitEntry: number = 0
+  @State jobId: string = ''
+  @State packId: string = ''
+  @State materialId: string = ''
+  @State waitRetryable: boolean = false
+  private pollTimer: number = -1
   private stack: string[] = []
   private stepsStack: number[] = []
   private api: IdentityApi = new IdentityApi(API_BASE_URL)
@@ -445,7 +451,7 @@ export struct FlowHost {
         .width(358)
         .height(190)
         .justifyContent(FlexAlign.Center)
-        .onClick(() => { this.push('wait', 7) })
+        .onClick(() => { this.pickFile() })
         Text('或').fontSize(13).fontColor('#7C848F')
         Row({ space: 12 }) {
           Text('抖音').layoutWeight(1).height(50).textAlign(TextAlign.Center).fontSize(16)
@@ -504,7 +510,9 @@ export struct FlowHost {
       PrimaryButton({
         label: '继续',
         enabled: FlowLogic.notesContinueEnabled(this.notes),
-        onTap: () => { this.push('wait', 7) }
+        onTap: () => {
+          this.submitMaterial('paste_note', 'text/plain', this.notes, '')
+        }
       })
         .margin({ left: 16, right: 16, bottom: 34 })
     }
@@ -547,11 +555,28 @@ export struct FlowHost {
       .width(248)
       .height(8)
       .margin({ top: 20 })
+      if (this.errorText.length > 0) {
+        Text(this.errorText)
+          .fontSize(13)
+          .fontColor('#7C848F')
+          .margin({ top: 12 })
+      }
+      if (this.waitRetryable) {
+        SecondaryButton({
+          label: '再试一次',
+          enabled: !this.busy,
+          onTap: () => { this.retryImport() }
+        })
+          .width(358)
+          .margin({ top: 12 })
+      }
       Blank().layoutWeight(1)
     }
     .width('100%')
     .height('100%')
     .alignItems(HorizontalAlign.Center)
+    .onAppear(() => { this.startJobPoll() })
+    .onDisAppear(() => { this.stopJobPoll() })
   }
 
   @Builder
@@ -691,9 +716,6 @@ export struct FlowHost {
     this.step = stepIndex
     this.errorText = ''
     this.toast = false
-    if (next === 'wait') {
-      this.resetWaitSession()
-    }
   }
 
   private back(): void {
@@ -719,8 +741,175 @@ export struct FlowHost {
   }
 
   private resetWaitSession(): void {
+    this.stopJobPoll()
     this.waitStart = 0
+    this.waitRetryable = false
+    this.jobId = ''
+    this.packId = ''
+    this.materialId = ''
     this.waitEntry = this.waitEntry + 1
+  }
+
+  private openWait(jobRaw: string): void {
+    this.resetWaitSession()
+    this.jobId = jsonField(jobRaw, 'job_id')
+    this.packId = jsonField(jobRaw, 'pack_id')
+    this.materialId = jsonField(jobRaw, 'material_id')
+    this.errorText = ''
+    this.push('wait', 7)
+  }
+
+  private stopJobPoll(): void {
+    if (this.pollTimer >= 0) {
+      clearInterval(this.pollTimer)
+      this.pollTimer = -1
+    }
+  }
+
+  private startJobPoll(): void {
+    this.stopJobPoll()
+    if (this.jobId.length === 0) {
+      return
+    }
+    const tick = (): void => {
+      const current = this.jobId
+      if (current.length === 0 || this.route !== 'wait') {
+        return
+      }
+      this.api.getJob(this.bearer, current).then((raw: string) => {
+        if (this.route !== 'wait' || this.jobId !== current) {
+          return
+        }
+        const status = statusOf(raw)
+        if (status !== 200) {
+          this.errorText = errorCode(raw)
+          return
+        }
+        const jobStatus = jsonField(raw, 'status')
+        const retryable = jsonField(raw, 'retryable') === 'true'
+        this.waitRetryable = FlowLogic.waitAllowsRetry(jobStatus, retryable)
+        if (FlowLogic.waitReleasesHome(jobStatus)) {
+          this.stopJobPoll()
+          this.onHome()
+          return
+        }
+        if (jobStatus === FlowLogic.jobFailedRetryable || jobStatus === FlowLogic.jobFailedTerminal) {
+          this.stopJobPoll()
+          const code = jsonField(raw, 'failure_code')
+          this.errorText = code.length > 0 ? code : jobStatus
+          return
+        }
+        this.errorText = ''
+      }).catch(() => {
+        if (this.route === 'wait') {
+          this.errorText = 'transport'
+        }
+      })
+    }
+    tick()
+    this.pollTimer = setInterval(tick, FlowLogic.jobPollIntervalMillis)
+  }
+
+  private submitMaterial(source: string, contentType: string, body: string, filename: string): void {
+    if (this.busy || body.length === 0) {
+      return
+    }
+    this.busy = true
+    this.errorText = ''
+    this.api.createPack(this.bearer).then((packRaw: string) => {
+      if (statusOf(packRaw) < 200 || statusOf(packRaw) >= 300) {
+        this.busy = false
+        this.errorText = errorCode(packRaw)
+        return
+      }
+      const packId = jsonField(packRaw, 'pack_id')
+      this.api.createUploadUrl(this.bearer, packId, source, contentType, body.length, filename).then((uploadRaw: string) => {
+        if (statusOf(uploadRaw) < 200 || statusOf(uploadRaw) >= 300) {
+          this.busy = false
+          this.errorText = errorCode(uploadRaw)
+          return
+        }
+        const uploadUrl = jsonField(uploadRaw, 'upload_url')
+        const method = jsonField(uploadRaw, 'upload_method')
+        const headers = jsonObject(uploadRaw, 'upload_headers')
+        this.api.putMaterial(uploadUrl, method.length > 0 ? method : 'PUT', headers, body).then((putStatus: string) => {
+          const code = Number(putStatus)
+          if (code < 200 || code >= 300) {
+            this.busy = false
+            this.errorText = 'VALIDATION_MATERIAL_NOT_UPLOADED'
+            return
+          }
+          const materialId = jsonField(uploadRaw, 'material_id')
+          this.api.createImport(FlowLogic.newIdempotencyKey(), this.bearer, packId, materialId).then((jobRaw: string) => {
+            this.busy = false
+            if (statusOf(jobRaw) >= 200 && statusOf(jobRaw) < 300) {
+              this.openWait(jobRaw)
+              return
+            }
+            this.errorText = errorCode(jobRaw)
+          }).catch(() => {
+            this.busy = false
+            this.errorText = 'transport'
+          })
+        }).catch(() => {
+          this.busy = false
+          this.errorText = 'transport'
+        })
+      }).catch(() => {
+        this.busy = false
+        this.errorText = 'transport'
+      })
+    }).catch(() => {
+      this.busy = false
+      this.errorText = 'transport'
+    })
+  }
+
+  private retryImport(): void {
+    if (this.busy || this.packId.length === 0 || this.materialId.length === 0) {
+      return
+    }
+    this.busy = true
+    this.errorText = ''
+    this.api.createImport(FlowLogic.newIdempotencyKey(), this.bearer, this.packId, this.materialId).then((raw: string) => {
+      this.busy = false
+      if (statusOf(raw) >= 200 && statusOf(raw) < 300) {
+        this.jobId = jsonField(raw, 'job_id')
+        this.packId = jsonField(raw, 'pack_id')
+        this.materialId = jsonField(raw, 'material_id')
+        this.waitRetryable = false
+        this.errorText = ''
+        this.waitEntry = this.waitEntry + 1
+        this.startJobPoll()
+        return
+      }
+      this.errorText = errorCode(raw)
+    }).catch(() => {
+      this.busy = false
+      this.errorText = 'transport'
+    })
+  }
+
+  private pickFile(): void {
+    const documentPicker = new picker.DocumentViewPicker()
+    documentPicker.select(new picker.DocumentSelectOptions()).then((uris: Array<string>) => {
+      if (uris.length === 0) {
+        return
+      }
+      const file = fileIo.openSync(uris[0], fileIo.OpenMode.READ_ONLY)
+      const stat = fileIo.statSync(file.fd)
+      const buffer = new ArrayBuffer(stat.size)
+      fileIo.readSync(file.fd, buffer)
+      fileIo.closeSync(file)
+      const view = new Uint8Array(buffer)
+      let text = ''
+      for (let i = 0; i < view.length; i++) {
+        text += String.fromCharCode(view[i])
+      }
+      this.submitMaterial('file', 'application/octet-stream', text, '')
+    }).catch(() => {
+      this.errorText = 'transport'
+    })
   }
 
   private sendCode(pushOtp: boolean): void {
@@ -841,7 +1030,13 @@ export struct FlowHost {
   }
 
   private askCamera(): void {
-    this.requestThen(['ohos.permission.CAMERA'], 'wait', 7)
+    try {
+      const context = getContext(this) as common.UIAbilityContext
+      abilityAccessCtrl.createAtManager().requestPermissionsFromUser(context, ['ohos.permission.CAMERA']).then(() => {
+      }).catch(() => {
+      })
+    } catch (_err) {
+    }
   }
 
   private requestThen(names: Array<Permissions>, next: string, stepIndex: number): void {

@@ -46,6 +46,62 @@ export class IdentityApi {
     return this.call('POST', '/v1/knowledge/first-pack/skip', '{}', key, bearer)
   }
 
+  createPack(bearer: string): Promise<string> {
+    return this.call('POST', '/v1/knowledge/packs', '{}', '', bearer)
+  }
+
+  createUploadUrl(bearer: string, packId: string, source: string, contentType: string, byteSize: number, filename: string): Promise<string> {
+    const payload: Record<string, string | number> = {
+      'pack_id': packId,
+      'source': source,
+      'content_type': contentType,
+      'byte_size': byteSize
+    }
+    if (filename.length > 0) {
+      payload['filename'] = filename
+    }
+    return this.call('POST', '/v1/knowledge/materials/upload-url', JSON.stringify(payload), '', bearer)
+  }
+
+  createImport(key: string, bearer: string, packId: string, materialId: string): Promise<string> {
+    const payload: Record<string, string> = { 'pack_id': packId, 'material_id': materialId }
+    return this.call('POST', '/v1/knowledge/imports', JSON.stringify(payload), key, bearer)
+  }
+
+  getJob(bearer: string, jobId: string): Promise<string> {
+    return this.call('GET', '/v1/knowledge/jobs/' + encodeURIComponent(jobId), '', '', bearer)
+  }
+
+  putMaterial(url: string, method: string, headersJson: string, body: string): Promise<string> {
+    return new Promise((resolve: (value: string) => void, reject: (reason: Error) => void) => {
+      const client = http.createHttp()
+      const header: Record<string, string> = {}
+      if (headersJson.length > 0) {
+        const parsed = JSON.parse(headersJson) as Record<string, Object>
+        const names = Object.keys(parsed)
+        for (let i = 0; i < names.length; i++) {
+          header[names[i]] = `${parsed[names[i]]}`
+        }
+      }
+      const httpMethod = method === 'POST' ? http.RequestMethod.POST : http.RequestMethod.PUT
+      client.request(url, {
+        method: httpMethod,
+        header: header,
+        extraData: body,
+        connectTimeout: 15000,
+        readTimeout: 15000,
+        expectDataType: http.HttpDataType.STRING
+      }, (err: Error, response: http.HttpResponse) => {
+        client.destroy()
+        if (err) {
+          reject(err)
+          return
+        }
+        resolve(`${response.responseCode}`)
+      })
+    })
+  }
+
   writeOnboarding(bearer: string, stepId: string, nickname: string, answer: string): Promise<string> {
     const payload: Record<string, string> = { 'step_id': stepId }
     if (nickname.length > 0) {
@@ -111,6 +167,19 @@ export function errorCode(raw: string): string {
     return code === undefined || code === null ? 'INTERNAL' : `${code}`
   } catch (_err) {
     return 'INTERNAL'
+  }
+}
+
+export function jsonObject(raw: string, name: string): string {
+  try {
+    const parsed = JSON.parse(bodyOf(raw)) as Record<string, Object>
+    const value = parsed[name]
+    if (value === undefined || value === null) {
+      return ''
+    }
+    return JSON.stringify(value)
+  } catch (_err) {
+    return ''
   }
 }
 

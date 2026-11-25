@@ -1,6 +1,11 @@
 package dev.qlutch.app.flow
 
 import dev.qlutch.contract.FirstPackSkipResponse
+import dev.qlutch.contract.ImportRequest
+import dev.qlutch.contract.KnowledgeJob
+import dev.qlutch.contract.KnowledgePack
+import dev.qlutch.contract.MaterialUploadUrlRequest
+import dev.qlutch.contract.MaterialUploadUrlResponse
 import dev.qlutch.contract.OnboardingState
 import dev.qlutch.contract.OnboardingWriteRequest
 import dev.qlutch.contract.OtpSendRequest
@@ -9,6 +14,9 @@ import dev.qlutch.contract.OtpVerifyRequest
 import dev.qlutch.contract.SessionResponse
 import dev.qlutch.contract.parseErrorBody
 import dev.qlutch.contract.parseFirstPackSkipResponse
+import dev.qlutch.contract.parseKnowledgeJob
+import dev.qlutch.contract.parseKnowledgePack
+import dev.qlutch.contract.parseMaterialUploadUrlResponse
 import dev.qlutch.contract.parseOnboardingState
 import dev.qlutch.contract.parseOtpSendResponse
 import dev.qlutch.contract.parseSessionResponse
@@ -32,6 +40,18 @@ internal interface IdentityApi {
     fun onboarding(bearer: String): ApiOutcome<OnboardingState>
     fun writeOnboarding(bearer: String, stepId: String, nickname: String?, answer: String?): ApiOutcome<OnboardingState>
     fun skipFirstPack(idempotencyKey: String, bearer: String): ApiOutcome<FirstPackSkipResponse>
+    fun createPack(bearer: String): ApiOutcome<KnowledgePack>
+    fun createUploadUrl(
+        bearer: String,
+        packId: String,
+        source: String,
+        contentType: String,
+        byteSize: Long,
+        filename: String?,
+    ): ApiOutcome<MaterialUploadUrlResponse>
+    fun putMaterial(url: String, method: String, headers: Map<String, String>, bytes: ByteArray): ApiOutcome<Unit>
+    fun createImport(idempotencyKey: String, bearer: String, packId: String, materialId: String): ApiOutcome<KnowledgeJob>
+    fun getJob(bearer: String, jobId: String): ApiOutcome<KnowledgeJob>
 }
 
 internal class HttpIdentityApi(private val baseUrl: String) : IdentityApi {
@@ -56,6 +76,54 @@ internal class HttpIdentityApi(private val baseUrl: String) : IdentityApi {
 
     override fun skipFirstPack(idempotencyKey: String, bearer: String): ApiOutcome<FirstPackSkipResponse> {
         return call("POST", "/v1/knowledge/first-pack/skip", "{}", idempotencyKey, bearer, ::parseFirstPackSkipResponse)
+    }
+
+    override fun createPack(bearer: String): ApiOutcome<KnowledgePack> {
+        return call("POST", "/v1/knowledge/packs", "{}", "", bearer, ::parseKnowledgePack)
+    }
+
+    override fun createUploadUrl(
+        bearer: String,
+        packId: String,
+        source: String,
+        contentType: String,
+        byteSize: Long,
+        filename: String?,
+    ): ApiOutcome<MaterialUploadUrlResponse> {
+        val body = MaterialUploadUrlRequest(packId, source, contentType, byteSize, filename)
+        return call("POST", "/v1/knowledge/materials/upload-url", body.toJSON().toString(), "", bearer, ::parseMaterialUploadUrlResponse)
+    }
+
+    override fun putMaterial(url: String, method: String, headers: Map<String, String>, bytes: ByteArray): ApiOutcome<Unit> {
+        return try {
+            val connection = (URI(url).toURL().openConnection() as HttpURLConnection)
+            try {
+                connection.requestMethod = if (method.isBlank()) "PUT" else method
+                connection.connectTimeout = 15000
+                connection.readTimeout = 15000
+                for ((name, value) in headers) {
+                    if (value.isNotEmpty()) connection.setRequestProperty(name, value)
+                }
+                connection.doOutput = true
+                connection.outputStream.use { it.write(bytes) }
+                val code = connection.responseCode
+                if (code in 200..299) ApiOutcome.Ok(Unit) else ApiOutcome.Err(code, "VALIDATION_MATERIAL_NOT_UPLOADED")
+            } finally {
+                connection.disconnect()
+            }
+        } catch (error: Exception) {
+            ApiOutcome.Transport(error.javaClass.simpleName)
+        }
+    }
+
+    override fun createImport(idempotencyKey: String, bearer: String, packId: String, materialId: String): ApiOutcome<KnowledgeJob> {
+        val body = ImportRequest(packId, materialId)
+        return call("POST", "/v1/knowledge/imports", body.toJSON().toString(), idempotencyKey, bearer, ::parseKnowledgeJob)
+    }
+
+    override fun getJob(bearer: String, jobId: String): ApiOutcome<KnowledgeJob> {
+        val encoded = java.net.URLEncoder.encode(jobId, Charsets.UTF_8).replace("+", "%20")
+        return call("GET", "/v1/knowledge/jobs/$encoded", null, "", bearer, ::parseKnowledgeJob)
     }
 
     private fun <T> post(path: String, json: String, idempotencyKey: String, bearer: String?, parse: (String) -> T): ApiOutcome<T> {

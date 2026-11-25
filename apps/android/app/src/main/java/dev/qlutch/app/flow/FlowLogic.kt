@@ -10,6 +10,18 @@ import java.util.UUID
 internal object FlowLogic {
     /** Length of one pass of the reading GIF. Looping uses this; it does not open home. */
     const val READING_LOOP_MILLIS = 2_000L
+
+    const val JOB_ACCEPTED = "accepted"
+    const val JOB_RUNNING = "running"
+    const val JOB_MAP_READY = "map_ready"
+    const val JOB_FAILED_RETRYABLE = "failed_retryable"
+    const val JOB_FAILED_TERMINAL = "failed_terminal"
+
+    /**
+     * How often the wait page reads GET /v1/knowledge/jobs/{id}.
+     * A4-O2 is still open, so this is an implementation default, not a locked product interval.
+     */
+    const val JOB_POLL_INTERVAL_MILLIS = 3_000L
     const val PROGRESS_TRACK_DP = 318
     /** Bridge wait meter is 248 wide with a 99-wide hold. It is not a countdown. */
     const val WAIT_TRACK_DP = 248
@@ -125,8 +137,13 @@ internal object FlowLogic {
         return kotlin.math.round(trackDp * clamped / 7f)
     }
 
-    /** Home opens only when map generation reports complete. Elapsed time is not that signal. */
-    fun canEnterHomeFromWait(mapGenerationComplete: Boolean): Boolean = mapGenerationComplete
+    /** Home opens only when the job status is map_ready. Elapsed time is not that signal. */
+    fun waitReleasesHome(status: String): Boolean = status == JOB_MAP_READY
+
+    /** Retry is a new import of the same material, and only for a retryable failure. */
+    fun waitAllowsRetry(status: String, retryable: Boolean): Boolean {
+        return status == JOB_FAILED_RETRYABLE && retryable
+    }
 
     fun waitMeterFraction(): Float = WAIT_METER_HOLD_DP.toFloat() / WAIT_TRACK_DP.toFloat()
 
