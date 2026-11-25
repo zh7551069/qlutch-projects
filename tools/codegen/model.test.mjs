@@ -91,6 +91,46 @@ test('builds the merged identity contract without dropping operations', () => {
   const revoke = model.operations.find((operation) => operation.operationId === 'revokeIdentitySession')
   assert.equal(revoke.responseName, null)
   assert.equal(revoke.auth, 'optional')
+  for (const id of [
+    'createKnowledgePack',
+    'createKnowledgeMaterialUploadUrl',
+    'createKnowledgeImport',
+    'getKnowledgeJob',
+    'skipKnowledgeFirstPack',
+  ]) {
+    assert.equal(ids.has(id), true, id)
+  }
+  const job = model.operations.find((operation) => operation.operationId === 'getKnowledgeJob')
+  assert.equal(job.path, '/v1/knowledge/jobs/{id}')
+  assert.deepEqual(job.pathParams, [{ name: 'id', required: true }])
+  const next = model.schemas.find((schema) => schema.name === 'NextStep')
+  assert.deepEqual(next.enumValues, ['NEED_ONBOARDING', 'NEED_FIRST_PACK', 'READY_HOME'])
+  const account = model.schemas.find((schema) => schema.name === 'AccountSummary')
+  assert.deepEqual(
+    account.fields.map((field) => field.jsonName),
+    ['user_id', 'is_new_user', 'onboarding_completed', 'has_first_pack'],
+  )
+})
+
+test('keeps one declared string path parameter', () => {
+  const withPath = structuredClone(spec)
+  withPath.paths['/v1/knowledge/jobs/{id}'] = {
+    get: {
+      operationId: 'getKnowledgeJob',
+      parameters: [
+        { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
+      ],
+      responses: {
+        200: {
+          content: { 'application/json': { schema: { $ref: '#/components/schemas/HealthStatus' } } },
+        },
+      },
+    },
+  }
+  const model = buildModel(withPath)
+  const job = model.operations.find((operation) => operation.operationId === 'getKnowledgeJob')
+  assert.equal(job.pathParams[0].name, 'id')
+  assert.equal(job.pathParams[0].required, true)
 })
 
 test('rejects a request body without a component schema', () => {

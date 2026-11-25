@@ -582,6 +582,56 @@ func (s *Service) UpdateProfile(ctx context.Context, accessToken string, raw []b
 	return s.marshal(profileView{Locale: account.Locale, Region: account.RegionPref})
 }
 
+// AccountSnapshot is the learner summary embedded by other domains.
+// IsNewUser is false here. That flag is true only on the verify response that created the account.
+type AccountSnapshot struct {
+	UserID              string
+	IsNewUser           bool
+	OnboardingCompleted bool
+	HasFirstPack        bool
+	NextStep            string
+}
+
+// AccountFromAccess authenticates a learner access token and returns the current summary.
+// NextStep still follows H3. H3 is an implementation assumption, not a confirmed product rule.
+func (s *Service) AccountFromAccess(ctx context.Context, accessToken string) (AccountSnapshot, *Error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	account, err := s.authenticate(ctx, accessToken)
+	if err != nil {
+		return AccountSnapshot{}, err
+	}
+	return snapshotOf(account), nil
+}
+
+// CompleteFirstPack records that the first-pack step is done.
+// It never clears the flag. It is not an HTTP route.
+func (s *Service) CompleteFirstPack(ctx context.Context, userID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	account, err := s.accounts.FindByID(ctx, userID)
+	if err != nil {
+		return err
+	}
+	if account == nil {
+		return errors.New("account missing")
+	}
+	if account.HasFirstPack {
+		return nil
+	}
+	return s.accounts.SaveFirstPack(ctx, userID, true)
+}
+
+func snapshotOf(account *user) AccountSnapshot {
+	return AccountSnapshot{
+		UserID:              account.ID,
+		IsNewUser:           false,
+		OnboardingCompleted: firstIncomplete(account) < 0,
+		HasFirstPack:        account.HasFirstPack,
+		NextStep:            nextStepOf(account),
+	}
+}
+
 // TestingSetFirstPack sets the knowledge-domain flag used by next_step.
 // It is not an HTTP endpoint. H3 is an implementation assumption, not a confirmed product rule.
 func (s *Service) TestingSetFirstPack(ctx context.Context, userID string, has bool) bool {

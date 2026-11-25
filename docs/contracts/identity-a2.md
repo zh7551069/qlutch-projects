@@ -29,4 +29,4 @@
 
 冷却只在真正发出短信后开始。`AUTH_ACCOUNT_EXISTS` 和 `AUTH_ACCOUNT_NOT_FOUND` 不发短信，也不占用冷却。新的幂等键若撞上冷却或预算，返回 `RATE_LIMITED`，`details.retry_after_seconds` 为剩余等待秒数。同一幂等键加同一请求体只保留第一次结果，不再次发短信，也不再次计数。
 
-`H3` 仍是实施假设，不是已确认产品口径：建档未完成是 `NEED_ONBOARDING`；建档完成但没有首个知识包是 `NEED_FIRST_PACK`；两件都完成是 `READY_HOME`。身份域没有知识包写入接口。首包标志只供测试夹具设置。
+`H3` 仍是实施假设，不是已确认产品口径：建档未完成是 `NEED_ONBOARDING`；建档完成但首包步骤未完成是 `NEED_FIRST_PACK`；两件都完成是 `READY_HOME`。身份 HTTP 不写 `has_first_pack`。知识域在首次导入作业进入 `map_ready`，或跳过首包成功时，把它置为 true。测试夹具仍可以直接设置。

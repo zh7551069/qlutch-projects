@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 )
 
@@ -174,6 +175,85 @@ type OnboardingWriteRequest struct {
 	Answer   *string `json:"answer,omitempty"`
 }
 
+type MaterialSource string
+
+const (
+	MaterialSourceCamera    MaterialSource = "camera"
+	MaterialSourceFile      MaterialSource = "file"
+	MaterialSourcePasteNote MaterialSource = "paste_note"
+)
+
+type JobStatus string
+
+const (
+	JobStatusAccepted        JobStatus = "accepted"
+	JobStatusRunning         JobStatus = "running"
+	JobStatusMapReady        JobStatus = "map_ready"
+	JobStatusFailedRetryable JobStatus = "failed_retryable"
+	JobStatusFailedTerminal  JobStatus = "failed_terminal"
+)
+
+type KnowledgePackCreateRequest struct {
+}
+
+type KnowledgePack struct {
+	Pack_id   string         `json:"pack_id"`
+	Account   AccountSummary `json:"account"`
+	Next_step NextStep       `json:"next_step"`
+}
+
+type MaterialUploadUrlRequest struct {
+	Pack_id      string         `json:"pack_id"`
+	Source       MaterialSource `json:"source"`
+	Content_type string         `json:"content_type"`
+	Byte_size    int64          `json:"byte_size"`
+	Filename     *string        `json:"filename,omitempty"`
+}
+
+type MaterialUploadUrlResponse struct {
+	Material_id    string            `json:"material_id"`
+	Pack_id        string            `json:"pack_id"`
+	Source         MaterialSource    `json:"source"`
+	Upload_url     string            `json:"upload_url"`
+	Upload_method  string            `json:"upload_method"`
+	Upload_headers map[string]string `json:"upload_headers"`
+	Expires_in     int64             `json:"expires_in"`
+	Account        AccountSummary    `json:"account"`
+	Next_step      NextStep          `json:"next_step"`
+}
+
+const (
+	MaterialUploadUrlResponseUpload_methodPUT = "PUT"
+)
+
+type ImportRequest struct {
+	Pack_id     string `json:"pack_id"`
+	Material_id string `json:"material_id"`
+}
+
+type KnowledgeJob struct {
+	Job_id           string         `json:"job_id"`
+	Pack_id          string         `json:"pack_id"`
+	Material_id      string         `json:"material_id"`
+	Source           MaterialSource `json:"source"`
+	Status           JobStatus      `json:"status"`
+	Map_ready        bool           `json:"map_ready"`
+	Retryable        bool           `json:"retryable"`
+	Progress_message *string        `json:"progress_message,omitempty"`
+	Failure_code     *string        `json:"failure_code"`
+	Failure_message  *string        `json:"failure_message"`
+	Account          AccountSummary `json:"account"`
+	Next_step        NextStep       `json:"next_step"`
+}
+
+type FirstPackSkipRequest struct {
+}
+
+type FirstPackSkipResponse struct {
+	Account   AccountSummary `json:"account"`
+	Next_step NextStep       `json:"next_step"`
+}
+
 type ErrorBody struct {
 	Error      ErrorBodyError `json:"error"`
 	Request_id string         `json:"request_id"`
@@ -186,28 +266,34 @@ type ErrorBodyError struct {
 }
 
 const (
-	ErrorBodyErrorCodeAUTHREQUIRED                = "AUTH_REQUIRED"
-	ErrorBodyErrorCodeAUTHEXPIRED                 = "AUTH_EXPIRED"
-	ErrorBodyErrorCodeAUTHFORBIDDEN               = "AUTH_FORBIDDEN"
-	ErrorBodyErrorCodeAUTHWRONGREALM              = "AUTH_WRONG_REALM"
-	ErrorBodyErrorCodeAUTHACCOUNTNOTFOUND         = "AUTH_ACCOUNT_NOT_FOUND"
-	ErrorBodyErrorCodeAUTHACCOUNTEXISTS           = "AUTH_ACCOUNT_EXISTS"
-	ErrorBodyErrorCodeAUTHOTPINVALID              = "AUTH_OTP_INVALID"
-	ErrorBodyErrorCodeAUTHOTPEXPIRED              = "AUTH_OTP_EXPIRED"
-	ErrorBodyErrorCodeAUTHOTPMAXATTEMPTS          = "AUTH_OTP_MAX_ATTEMPTS"
-	ErrorBodyErrorCodeVALIDATIONINVALIDPHONE      = "VALIDATION_INVALID_PHONE"
-	ErrorBodyErrorCodeVALIDATIONUNSUPPORTEDREGION = "VALIDATION_UNSUPPORTED_REGION"
-	ErrorBodyErrorCodeVALIDATIONUNSUPPORTEDLOCALE = "VALIDATION_UNSUPPORTED_LOCALE"
-	ErrorBodyErrorCodeVALIDATIONINVALIDPURPOSE    = "VALIDATION_INVALID_PURPOSE"
-	ErrorBodyErrorCodeVALIDATIONINVALIDOTPFORMAT  = "VALIDATION_INVALID_OTP_FORMAT"
-	ErrorBodyErrorCodeVALIDATIONMISSINGFIELD      = "VALIDATION_MISSING_FIELD"
-	ErrorBodyErrorCodeVALIDATIONNICKNAME          = "VALIDATION_NICKNAME"
-	ErrorBodyErrorCodeVALIDATIONINVALIDSTEP       = "VALIDATION_INVALID_STEP"
-	ErrorBodyErrorCodeVALIDATIONINVALIDSTEPANSWER = "VALIDATION_INVALID_STEP_ANSWER"
-	ErrorBodyErrorCodeVALIDATIONSTEPOUTOFORDER    = "VALIDATION_STEP_OUT_OF_ORDER"
-	ErrorBodyErrorCodeIDEMPOTENCYKEYMISMATCH      = "IDEMPOTENCY_KEY_MISMATCH"
-	ErrorBodyErrorCodeRATELIMITED                 = "RATE_LIMITED"
-	ErrorBodyErrorCodeINTERNAL                    = "INTERNAL"
+	ErrorBodyErrorCodeAUTHREQUIRED                  = "AUTH_REQUIRED"
+	ErrorBodyErrorCodeAUTHEXPIRED                   = "AUTH_EXPIRED"
+	ErrorBodyErrorCodeAUTHFORBIDDEN                 = "AUTH_FORBIDDEN"
+	ErrorBodyErrorCodeAUTHWRONGREALM                = "AUTH_WRONG_REALM"
+	ErrorBodyErrorCodeAUTHACCOUNTNOTFOUND           = "AUTH_ACCOUNT_NOT_FOUND"
+	ErrorBodyErrorCodeAUTHACCOUNTEXISTS             = "AUTH_ACCOUNT_EXISTS"
+	ErrorBodyErrorCodeAUTHOTPINVALID                = "AUTH_OTP_INVALID"
+	ErrorBodyErrorCodeAUTHOTPEXPIRED                = "AUTH_OTP_EXPIRED"
+	ErrorBodyErrorCodeAUTHOTPMAXATTEMPTS            = "AUTH_OTP_MAX_ATTEMPTS"
+	ErrorBodyErrorCodeVALIDATIONINVALIDPHONE        = "VALIDATION_INVALID_PHONE"
+	ErrorBodyErrorCodeVALIDATIONUNSUPPORTEDREGION   = "VALIDATION_UNSUPPORTED_REGION"
+	ErrorBodyErrorCodeVALIDATIONUNSUPPORTEDLOCALE   = "VALIDATION_UNSUPPORTED_LOCALE"
+	ErrorBodyErrorCodeVALIDATIONINVALIDPURPOSE      = "VALIDATION_INVALID_PURPOSE"
+	ErrorBodyErrorCodeVALIDATIONINVALIDOTPFORMAT    = "VALIDATION_INVALID_OTP_FORMAT"
+	ErrorBodyErrorCodeVALIDATIONMISSINGFIELD        = "VALIDATION_MISSING_FIELD"
+	ErrorBodyErrorCodeVALIDATIONNICKNAME            = "VALIDATION_NICKNAME"
+	ErrorBodyErrorCodeVALIDATIONINVALIDSTEP         = "VALIDATION_INVALID_STEP"
+	ErrorBodyErrorCodeVALIDATIONINVALIDSTEPANSWER   = "VALIDATION_INVALID_STEP_ANSWER"
+	ErrorBodyErrorCodeVALIDATIONSTEPOUTOFORDER      = "VALIDATION_STEP_OUT_OF_ORDER"
+	ErrorBodyErrorCodeVALIDATIONINVALIDSOURCE       = "VALIDATION_INVALID_SOURCE"
+	ErrorBodyErrorCodeVALIDATIONUNSUPPORTEDMEDIA    = "VALIDATION_UNSUPPORTED_MEDIA"
+	ErrorBodyErrorCodeVALIDATIONMEDIATOOLARGE       = "VALIDATION_MEDIA_TOO_LARGE"
+	ErrorBodyErrorCodeVALIDATIONMATERIALNOTUPLOADED = "VALIDATION_MATERIAL_NOT_UPLOADED"
+	ErrorBodyErrorCodeNOTFOUND                      = "NOT_FOUND"
+	ErrorBodyErrorCodeCONFLICT                      = "CONFLICT"
+	ErrorBodyErrorCodeIDEMPOTENCYKEYMISMATCH        = "IDEMPOTENCY_KEY_MISMATCH"
+	ErrorBodyErrorCodeRATELIMITED                   = "RATE_LIMITED"
+	ErrorBodyErrorCodeINTERNAL                      = "INTERNAL"
 )
 
 func (c *Client) GetHealth(ctx context.Context) (APIResponse[HealthStatus], error) {
@@ -261,6 +347,37 @@ func (c *Client) GetIdentityProfile(ctx context.Context, meta CallMeta) (APIResp
 func (c *Client) PutIdentityProfile(ctx context.Context, body IdentityProfileUpdate, meta CallMeta) (APIResponse[IdentityProfile], error) {
 	payload := any(body)
 	return doJSON[IdentityProfile](ctx, c, http.MethodPut, "/v1/identity/profile", payload, "", meta.RequestID, meta.Bearer)
+}
+
+func (c *Client) CreateKnowledgePack(ctx context.Context, body *KnowledgePackCreateRequest, meta CallMeta) (APIResponse[KnowledgePack], error) {
+	var payload any
+	if body != nil {
+		payload = body
+	}
+	return doJSON[KnowledgePack](ctx, c, http.MethodPost, "/v1/knowledge/packs", payload, "", meta.RequestID, meta.Bearer)
+}
+
+func (c *Client) CreateKnowledgeMaterialUploadUrl(ctx context.Context, body MaterialUploadUrlRequest, meta CallMeta) (APIResponse[MaterialUploadUrlResponse], error) {
+	payload := any(body)
+	return doJSON[MaterialUploadUrlResponse](ctx, c, http.MethodPost, "/v1/knowledge/materials/upload-url", payload, "", meta.RequestID, meta.Bearer)
+}
+
+func (c *Client) CreateKnowledgeImport(ctx context.Context, idempotencyKey string, body ImportRequest, meta CallMeta) (APIResponse[KnowledgeJob], error) {
+	payload := any(body)
+	return doJSON[KnowledgeJob](ctx, c, http.MethodPost, "/v1/knowledge/imports", payload, idempotencyKey, meta.RequestID, meta.Bearer)
+}
+
+func (c *Client) GetKnowledgeJob(ctx context.Context, id string, meta CallMeta) (APIResponse[KnowledgeJob], error) {
+	var payload any
+	return doJSON[KnowledgeJob](ctx, c, http.MethodGet, strings.Replace("/v1/knowledge/jobs/{id}", "{id}", url.PathEscape(id), 1), payload, "", meta.RequestID, meta.Bearer)
+}
+
+func (c *Client) SkipKnowledgeFirstPack(ctx context.Context, idempotencyKey string, body *FirstPackSkipRequest, meta CallMeta) (APIResponse[FirstPackSkipResponse], error) {
+	var payload any
+	if body != nil {
+		payload = body
+	}
+	return doJSON[FirstPackSkipResponse](ctx, c, http.MethodPost, "/v1/knowledge/first-pack/skip", payload, idempotencyKey, meta.RequestID, meta.Bearer)
 }
 
 func doJSON[T any](ctx context.Context, client *Client, method, path string, body any, idempotencyKey, requestID, bearer string) (APIResponse[T], error) {

@@ -10,6 +10,10 @@ export type NextStep = "NEED_ONBOARDING" | "NEED_FIRST_PACK" | "READY_HOME"
 
 export type StepId = "nickname" | "age" | "study_or_work" | "identity" | "how_to_address" | "exam_track" | "daily_time"
 
+export type MaterialSource = "camera" | "file" | "paste_note"
+
+export type JobStatus = "accepted" | "running" | "map_ready" | "failed_retryable" | "failed_terminal"
+
 export interface HealthStatus {
   status: string
 }
@@ -96,6 +100,65 @@ export interface OnboardingWriteRequest {
   answer?: string
 }
 
+export interface KnowledgePackCreateRequest {
+
+}
+
+export interface KnowledgePack {
+  pack_id: string
+  account: AccountSummary
+  next_step: NextStep
+}
+
+export interface MaterialUploadUrlRequest {
+  pack_id: string
+  source: MaterialSource
+  content_type: string
+  byte_size: number
+  filename?: string
+}
+
+export interface MaterialUploadUrlResponse {
+  material_id: string
+  pack_id: string
+  source: MaterialSource
+  upload_url: string
+  upload_method: string
+  upload_headers: Record<string, string>
+  expires_in: number
+  account: AccountSummary
+  next_step: NextStep
+}
+
+export interface ImportRequest {
+  pack_id: string
+  material_id: string
+}
+
+export interface KnowledgeJob {
+  job_id: string
+  pack_id: string
+  material_id: string
+  source: MaterialSource
+  status: JobStatus
+  map_ready: boolean
+  retryable: boolean
+  progress_message?: string
+  failure_code?: string | null
+  failure_message?: string | null
+  account: AccountSummary
+  next_step: NextStep
+}
+
+export interface FirstPackSkipRequest {
+
+}
+
+export interface FirstPackSkipResponse {
+  account: AccountSummary
+  next_step: NextStep
+}
+
 export interface ErrorBody {
   error: ErrorBodyError
   request_id: string
@@ -166,6 +229,26 @@ export class QlutchClient {
 
   putIdentityProfile(body: IdentityProfileUpdate, init?: { signal?: AbortSignal; requestId?: string; bearer?: string }): Promise<ApiResponse<IdentityProfile>> {
     return this.request<IdentityProfile>('PUT', '/v1/identity/profile', { ...init, body })
+  }
+
+  createKnowledgePack(init?: { signal?: AbortSignal; requestId?: string; bearer?: string; body?: KnowledgePackCreateRequest }): Promise<ApiResponse<KnowledgePack>> {
+    return this.request<KnowledgePack>('POST', '/v1/knowledge/packs', { ...init })
+  }
+
+  createKnowledgeMaterialUploadUrl(body: MaterialUploadUrlRequest, init?: { signal?: AbortSignal; requestId?: string; bearer?: string }): Promise<ApiResponse<MaterialUploadUrlResponse>> {
+    return this.request<MaterialUploadUrlResponse>('POST', '/v1/knowledge/materials/upload-url', { ...init, body })
+  }
+
+  createKnowledgeImport(idempotencyKey: string, body: ImportRequest, init?: { signal?: AbortSignal; requestId?: string; bearer?: string }): Promise<ApiResponse<KnowledgeJob>> {
+    return this.request<KnowledgeJob>('POST', '/v1/knowledge/imports', { ...init, idempotencyKey, body })
+  }
+
+  getKnowledgeJob(id: string, init?: { signal?: AbortSignal; requestId?: string; bearer?: string }): Promise<ApiResponse<KnowledgeJob>> {
+    return this.request<KnowledgeJob>('GET', `/v1/knowledge/jobs/${encodeURIComponent(id)}`, { ...init })
+  }
+
+  skipKnowledgeFirstPack(idempotencyKey: string, init?: { signal?: AbortSignal; requestId?: string; bearer?: string; body?: FirstPackSkipRequest }): Promise<ApiResponse<FirstPackSkipResponse>> {
+    return this.request<FirstPackSkipResponse>('POST', '/v1/knowledge/first-pack/skip', { ...init, idempotencyKey })
   }
 
   private async request<T>(method: string, path: string, init?: CallInit & { body?: unknown; idempotencyKey?: string }): Promise<ApiResponse<T>> {

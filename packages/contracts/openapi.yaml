@@ -1,17 +1,19 @@
 openapi: 3.0.3
 info:
   title: Qlutch API
-  version: 0.1.0-C
+  version: 0.1.1-C
   description: |
-    在脚手架探针之上扩展新用户流程 A1 身份域。
-    平台约定见 I03；正文见《新用户流程 A1 身份契约》v0.1.0-C。
-    不包含知识域，不包含内部后管 API。
+    在脚手架探针之上扩展新用户流程 A1 身份域，并追加 A4 知识域（知识包、预签名上传、导入受理、作业查询与跳过首包）。
+    平台约定见 I03；正文见《新用户流程 A1 身份契约》v0.1.0-C 与《新用户流程 A4 知识包与导入受理契约》v0.1.1-C。
+    不改 A1 已锁的身份路径与 schema 定义（错误码枚举仅作兼容追加）。
+    不包含内部后管 API，不包含抖音 / B 站入口，不包含 S02 出题或 worker 内部接口。
 servers:
   - url: http://127.0.0.1:4710
     description: 本地 API
 tags:
   - name: Health
   - name: Identity
+  - name: Knowledge
 security:
   - BearerAuth: []
 paths:
@@ -297,6 +299,175 @@ paths:
           $ref: "#/components/responses/Error403"
         "500":
           $ref: "#/components/responses/Error500"
+  /v1/knowledge/packs:
+    post:
+      operationId: createKnowledgePack
+      tags: [Knowledge]
+      summary: 创建空知识包
+      parameters:
+        - $ref: "#/components/parameters/XRequestId"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/KnowledgePackCreateRequest"
+      responses:
+        "201":
+          description: 已创建空知识包
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KnowledgePack"
+        "400":
+          $ref: "#/components/responses/Error400"
+        "401":
+          $ref: "#/components/responses/Error401"
+        "403":
+          $ref: "#/components/responses/Error403"
+        "500":
+          $ref: "#/components/responses/Error500"
+  /v1/knowledge/materials/upload-url:
+    post:
+      operationId: createKnowledgeMaterialUploadUrl
+      tags: [Knowledge]
+      summary: 申请材料预签名上传
+      parameters:
+        - $ref: "#/components/parameters/XRequestId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MaterialUploadUrlRequest"
+      responses:
+        "200":
+          description: 已签发预签名上传地址
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MaterialUploadUrlResponse"
+        "400":
+          $ref: "#/components/responses/Error400"
+        "401":
+          $ref: "#/components/responses/Error401"
+        "403":
+          $ref: "#/components/responses/Error403"
+        "404":
+          $ref: "#/components/responses/Error404"
+        "500":
+          $ref: "#/components/responses/Error500"
+  /v1/knowledge/imports:
+    post:
+      operationId: createKnowledgeImport
+      tags: [Knowledge]
+      summary: 提交导入并入队
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/XRequestId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ImportRequest"
+      responses:
+        "202":
+          description: 已受理导入（含幂等重放）
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KnowledgeJob"
+        "400":
+          $ref: "#/components/responses/Error400"
+        "401":
+          $ref: "#/components/responses/Error401"
+        "403":
+          $ref: "#/components/responses/Error403"
+        "404":
+          $ref: "#/components/responses/Error404"
+        "409":
+          $ref: "#/components/responses/Error409"
+        "422":
+          $ref: "#/components/responses/Error422"
+        "429":
+          $ref: "#/components/responses/Error429"
+        "500":
+          $ref: "#/components/responses/Error500"
+  /v1/knowledge/jobs/{id}:
+    get:
+      operationId: getKnowledgeJob
+      tags: [Knowledge]
+      summary: 查询导入作业
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+        - $ref: "#/components/parameters/XRequestId"
+      responses:
+        "200":
+          description: 当前作业
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KnowledgeJob"
+        "401":
+          $ref: "#/components/responses/Error401"
+        "403":
+          $ref: "#/components/responses/Error403"
+        "404":
+          $ref: "#/components/responses/Error404"
+        "500":
+          $ref: "#/components/responses/Error500"
+  /v1/knowledge/first-pack/skip:
+    post:
+      operationId: skipKnowledgeFirstPack
+      tags: [Knowledge]
+      summary: 跳过首包（我没有材料）
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/XRequestId"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FirstPackSkipRequest"
+      responses:
+        "200":
+          description: 首包步骤已完成（含幂等重放或已完成后再跳过）
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FirstPackSkipResponse"
+        "400":
+          $ref: "#/components/responses/Error400"
+        "401":
+          $ref: "#/components/responses/Error401"
+        "403":
+          $ref: "#/components/responses/Error403"
+        "409":
+          $ref: "#/components/responses/Error409"
+        "500":
+          $ref: "#/components/responses/Error500"
 components:
   securitySchemes:
     BearerAuth:
@@ -524,6 +695,153 @@ components:
         answer:
           type: string
           minLength: 1
+    MaterialSource:
+      type: string
+      enum: [camera, file, paste_note]
+    JobStatus:
+      type: string
+      enum: [accepted, running, map_ready, failed_retryable, failed_terminal]
+    KnowledgePackCreateRequest:
+      type: object
+      additionalProperties: false
+      properties: {}
+    KnowledgePack:
+      type: object
+      additionalProperties: false
+      required: [pack_id, account, next_step]
+      properties:
+        pack_id:
+          type: string
+          minLength: 1
+        account:
+          $ref: "#/components/schemas/AccountSummary"
+        next_step:
+          $ref: "#/components/schemas/NextStep"
+    MaterialUploadUrlRequest:
+      type: object
+      additionalProperties: false
+      required: [pack_id, source, content_type, byte_size]
+      properties:
+        pack_id:
+          type: string
+          minLength: 1
+        source:
+          $ref: "#/components/schemas/MaterialSource"
+        content_type:
+          type: string
+          minLength: 1
+        byte_size:
+          type: integer
+          minimum: 1
+        filename:
+          type: string
+          minLength: 1
+    MaterialUploadUrlResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - material_id
+        - pack_id
+        - source
+        - upload_url
+        - upload_method
+        - upload_headers
+        - expires_in
+        - account
+        - next_step
+      properties:
+        material_id:
+          type: string
+          minLength: 1
+        pack_id:
+          type: string
+          minLength: 1
+        source:
+          $ref: "#/components/schemas/MaterialSource"
+        upload_url:
+          type: string
+          minLength: 1
+        upload_method:
+          type: string
+          enum: [PUT]
+        upload_headers:
+          type: object
+          additionalProperties:
+            type: string
+        expires_in:
+          type: integer
+          minimum: 1
+        account:
+          $ref: "#/components/schemas/AccountSummary"
+        next_step:
+          $ref: "#/components/schemas/NextStep"
+    ImportRequest:
+      type: object
+      additionalProperties: false
+      required: [pack_id, material_id]
+      properties:
+        pack_id:
+          type: string
+          minLength: 1
+        material_id:
+          type: string
+          minLength: 1
+    KnowledgeJob:
+      type: object
+      additionalProperties: false
+      required:
+        - job_id
+        - pack_id
+        - material_id
+        - source
+        - status
+        - map_ready
+        - retryable
+        - account
+        - next_step
+      properties:
+        job_id:
+          type: string
+          minLength: 1
+        pack_id:
+          type: string
+          minLength: 1
+        material_id:
+          type: string
+          minLength: 1
+        source:
+          $ref: "#/components/schemas/MaterialSource"
+        status:
+          $ref: "#/components/schemas/JobStatus"
+        map_ready:
+          type: boolean
+        retryable:
+          type: boolean
+        progress_message:
+          type: string
+        failure_code:
+          type: string
+          nullable: true
+        failure_message:
+          type: string
+          nullable: true
+        account:
+          $ref: "#/components/schemas/AccountSummary"
+        next_step:
+          $ref: "#/components/schemas/NextStep"
+    FirstPackSkipRequest:
+      type: object
+      additionalProperties: false
+      properties: {}
+    FirstPackSkipResponse:
+      type: object
+      additionalProperties: false
+      required: [account, next_step]
+      properties:
+        account:
+          $ref: "#/components/schemas/AccountSummary"
+        next_step:
+          $ref: "#/components/schemas/NextStep"
     ErrorBody:
       type: object
       additionalProperties: false
@@ -556,6 +874,12 @@ components:
                 - VALIDATION_INVALID_STEP
                 - VALIDATION_INVALID_STEP_ANSWER
                 - VALIDATION_STEP_OUT_OF_ORDER
+                - VALIDATION_INVALID_SOURCE
+                - VALIDATION_UNSUPPORTED_MEDIA
+                - VALIDATION_MEDIA_TOO_LARGE
+                - VALIDATION_MATERIAL_NOT_UPLOADED
+                - NOT_FOUND
+                - CONFLICT
                 - IDEMPOTENCY_KEY_MISMATCH
                 - RATE_LIMITED
                 - INTERNAL

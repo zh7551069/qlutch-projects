@@ -11,10 +11,11 @@ const header = {
 export function emitGo(model) {
   const needsMeta = model.operations.some((operation) => operationNeedsMeta(operation))
   const structs = model.schemas.map((schema) => emitGoSchema(schema)).join('\n\n')
+  const needsPathEscape = model.operations.some((operation) => (operation.pathParams ?? []).length > 0)
   const methods = model.operations
     .map((operation) => {
       const response = operation.responseName ?? 'Empty'
-      const args = ['ctx context.Context']
+      const args = ['ctx context.Context', ...pathParamArgs(operation, 'go')]
       if (headerRequired(operation, 'Idempotency-Key') || headerPresent(operation, 'Idempotency-Key')) {
         args.push('idempotencyKey string')
       }
@@ -26,7 +27,7 @@ export function emitGo(model) {
       const idem = headerPresent(operation, 'Idempotency-Key') ? 'idempotencyKey' : '""'
       const requestID = headerPresent(operation, 'X-Request-Id') ? 'meta.RequestID' : '""'
       const bearer = operationNeedsMeta(operation) ? 'meta.Bearer' : '""'
-      return `func (c *Client) ${operation.goName}(${args.join(', ')}) (APIResponse[${response}], error) {\n${bodyExpr}return doJSON[${response}](ctx, c, http.Method${exportWord(operation.method)}, "${operation.path}", payload, ${idem}, ${requestID}, ${bearer})\n}`
+      return `func (c *Client) ${operation.goName}(${args.join(', ')}) (APIResponse[${response}], error) {\n${bodyExpr}return doJSON[${response}](ctx, c, http.Method${exportWord(operation.method)}, ${goPathExpr(operation)}, payload, ${idem}, ${requestID}, ${bearer})\n}`
     })
     .join('\n\n')
   return `${header.go}package qlutchapi
@@ -37,7 +38,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
-	"strings"
+	${needsPathEscape ? '"net/url"\n\t' : ''}"strings"
 )
 
 type APIResponse[T any] struct {
@@ -178,7 +179,7 @@ export function emitTS(model) {
     .map((operation) => {
       const response = operation.responseName ?? 'Empty'
       const params = tsParams(operation)
-      return `  ${operation.operationId}(${params}): Promise<ApiResponse<${response}>> {\n    return this.request<${response}>('${operation.method}', '${operation.path}', ${tsInitExpr(operation)})\n  }`
+      return `  ${operation.operationId}(${params}): Promise<ApiResponse<${response}>> {\n    return this.request<${response}>('${operation.method}', ${tsPathExpr(operation)}, ${tsInitExpr(operation)})\n  }`
     })
     .join('\n\n')
   return `${header.ts}${aliases}
@@ -240,14 +241,20 @@ function joinURL(baseURL: string, path: string): string {
 }
 
 function tsParams(operation) {
-  const parts = []
+  const parts = [...pathParamArgs(operation, 'ts')]
   if (headerPresent(operation, 'Idempotency-Key')) parts.push('idempotencyKey: string')
   if (operation.bodyName && operation.bodyRequired) parts.push(`body: ${operation.bodyName}`)
   const initFields = ['signal?: AbortSignal', 'requestId?: string']
   if (operation.auth !== 'none') initFields.push('bearer?: string')
   if (operation.bodyName && !operation.bodyRequired) initFields.push(`body?: ${operation.bodyName}`)
   const initOptional = operationNeedsMeta(operation) || (operation.bodyName && !operation.bodyRequired) || !operation.bodyName
-  if (!operation.bodyName && !headerPresent(operation, 'Idempotency-Key') && operation.auth === 'none' && !headerPresent(operation, 'X-Request-Id')) {
+  if (
+    (operation.pathParams ?? []).length === 0 &&
+    !operation.bodyName &&
+    !headerPresent(operation, 'Idempotency-Key') &&
+    operation.auth === 'none' &&
+    !headerPresent(operation, 'X-Request-Id')
+  ) {
     return 'init?: { signal?: AbortSignal }'
   }
   if (initOptional) parts.push(`init?: { ${initFields.join('; ')} }`)
@@ -331,8 +338,9 @@ export function emitSwift(model) {
   const methods = model.operations
     .map((operation) => {
       const response = operation.responseName ?? 'Empty'
-      const params = []
+      const params = [...pathParamArgs(operation, 'swift')]
       const headers = []
+      const requestPath = swiftPathExpr(operation)
       if (headerPresent(operation, 'Idempotency-Key')) {
         params.push('idempotencyKey: String')
         headers.push('if !idempotencyKey.isEmpty { header["Idempotency-Key"] = idempotencyKey }')
@@ -359,7 +367,7 @@ export function emitSwift(model) {
       return `    public func ${operation.operationId}(${params.join(', ')}) async throws -> APIResponse<${response}> {
         ${encoded}var header: [String: String] = [:]
         ${headers.join('\n        ')}
-        return try await request(method: "${operation.method}", path: "${operation.path}", body: ${bodyArg}, headers: header)
+        return try await request(method: "${operation.method}", path: ${requestPath}, body: ${bodyArg}, headers: header)
     }`
     })
     .join('\n\n')
@@ -503,7 +511,7 @@ export function emitKotlin(model) {
   const methods = model.operations
     .map((operation) => {
       const response = operation.responseName ?? 'Empty'
-      const params = ['']
+      const params = ['', ...pathParamArgs(operation, 'kotlin')]
       const headerLines = []
       if (headerPresent(operation, 'Idempotency-Key')) {
         params.push('idempotencyKey: String')
@@ -532,7 +540,7 @@ export function emitKotlin(model) {
       return `    fun ${operation.operationId}(${params.filter(Boolean).join(', ')}): ApiResponse<${response}> {
         val headers = linkedMapOf<String, String>()
         ${headerLines.join('\n        ')}
-        val raw = request("${operation.method}", "${operation.path}", ${bodyExpr}, headers)
+        val raw = request("${operation.method}", ${kotlinPathExpr(operation)}, ${bodyExpr}, headers)
         val parsed = ${operation.responseName ? parseExpr : 'Empty()'}
         return ApiResponse(raw.statusCode, parsed, raw.requestId)
     }`
@@ -597,6 +605,21 @@ ${kotlinArrayReaders(model)}private fun readStringMap(root: JSONObject, name: St
 }
 
 function emitKotlinClass(model, byName, schema) {
+  if (schema.fields.length === 0) {
+    return `class ${schema.name} {
+    fun toJSON(): JSONObject {
+        return JSONObject()
+    }
+}
+
+fun parse${schema.name}(text: String): ${schema.name} {
+    return parse${schema.name}Object(JSONObject(text))
+}
+
+fun parse${schema.name}Object(root: JSONObject): ${schema.name} {
+    return ${schema.name}()
+}`
+  }
   const params = schema.fields
     .map((field) => `    val ${field.jsonName}: ${kotlinFieldType(model, field)}`)
     .join(',\n')
@@ -683,7 +706,7 @@ function kotlinRequiredRead(model, field) {
     case 'json':
       return `root.get("${field.jsonName}").toString()`
     case 'map':
-      return `readStringMap(root, "${field.jsonName}")`
+      return `readStringMap(root, "${field.jsonName}") ?: emptyMap()`
     case 'ref': {
       const target = schemaByName(model, type.name)
       if (target.kind === 'alias') return `root.getString("${field.jsonName}")`
@@ -833,7 +856,7 @@ function readJSONText(value: Object | undefined): string {
 
 function emitArkFunction(model, operation) {
   const response = operation.responseName ?? 'Empty'
-  const args = ['baseUrl: string']
+  const args = ['baseUrl: string', ...pathParamArgs(operation, 'ark')]
   if (headerPresent(operation, 'Idempotency-Key')) args.push('idempotencyKey: string')
   if (operation.bodyName) {
     args.push(operation.bodyRequired ? `body: ${operation.bodyName}` : `body: ${operation.bodyName} | null`)
@@ -854,7 +877,7 @@ function emitArkFunction(model, operation) {
   return `export function ${operation.operationId}(${args.join(', ')}): Promise<${operation.goName}Result> {
   const extra = new RequestExtra()
 ${extra.join('\n')}
-  return request(joinURL(baseUrl, '${operation.path}'), http.RequestMethod.${operation.method}, extra).then((response: http.HttpResponse) => {
+  return request(joinURL(baseUrl, ${arkPathExpr(operation)}), http.RequestMethod.${operation.method}, extra).then((response: http.HttpResponse) => {
     const result = new ${operation.goName}Result()
     result.statusCode = response.responseCode
     const header = response.header['X-Request-Id']
@@ -1087,6 +1110,65 @@ function modelUsesJSON(model) {
     }
   }
   return false
+}
+
+function pathParamArgs(operation, lang) {
+  return (operation.pathParams ?? []).map((param) => {
+    if (lang === 'go') return `${param.name} string`
+    if (lang === 'swift') return `${param.name}: String`
+    if (lang === 'kotlin') return `${param.name}: String`
+    return `${param.name}: string`
+  })
+}
+
+function goPathExpr(operation) {
+  const params = operation.pathParams ?? []
+  if (params.length === 0) return JSON.stringify(operation.path)
+  let expr = JSON.stringify(operation.path)
+  for (const param of params) {
+    expr = `strings.Replace(${expr}, "{${param.name}}", url.PathEscape(${param.name}), 1)`
+  }
+  return expr
+}
+
+function tsPathExpr(operation) {
+  const params = operation.pathParams ?? []
+  if (params.length === 0) return `'${operation.path}'`
+  let path = operation.path
+  for (const param of params) {
+    path = path.replaceAll(`{${param.name}}`, `\${encodeURIComponent(${param.name})}`)
+  }
+  return `\`${path}\``
+}
+
+function swiftPathExpr(operation) {
+  const params = operation.pathParams ?? []
+  if (params.length === 0) return `"${operation.path}"`
+  let path = operation.path
+  for (const param of params) {
+    path = path.replaceAll(
+      `{${param.name}}`,
+      `\\(${param.name}.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? ${param.name})`,
+    )
+  }
+  return `"${path}"`
+}
+
+function kotlinPathExpr(operation) {
+  const params = operation.pathParams ?? []
+  if (params.length === 0) return `"${operation.path}"`
+  const [head, tail] = operation.path.split(`{${params[0].name}}`)
+  return `"${head}" + java.net.URLEncoder.encode(${params[0].name}, java.nio.charset.StandardCharsets.UTF_8).replace("+", "%20") + "${tail}"`
+}
+
+function arkPathExpr(operation) {
+  const params = operation.pathParams ?? []
+  if (params.length === 0) return `'${operation.path}'`
+  let path = operation.path
+  for (const param of params) {
+    path = path.replaceAll(`{${param.name}}`, `\${encodeURIComponent(${param.name})}`)
+  }
+  return `\`${path}\``
 }
 
 function headerPresent(operation, name) {
