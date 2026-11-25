@@ -40,6 +40,7 @@ android {
 
     androidResources {
         noCompress += "mp4"
+        noCompress += "gif"
     }
 
     testOptions {

@@ -6,6 +6,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import dev.qlutch.app.flow.FlowActivity
+import dev.qlutch.app.flow.FlowLogic
 
 /** P02 welcome. No session check: splash always lands here, and the buttons stay. */
 class WelcomeActivity : ComponentActivity() {
@@ -25,7 +27,14 @@ class WelcomeActivity : ComponentActivity() {
             window.isNavigationBarContrastEnforced = false
         }
         setContent {
-            WelcomeScreen()
+            WelcomeScreen(
+                onStart = {
+                    startActivity(FlowActivity.intent(this, FlowLogic.PURPOSE_REGISTER))
+                },
+                onExistingAccount = {
+                    startActivity(FlowActivity.intent(this, FlowLogic.PURPOSE_LOGIN))
+                },
+            )
         }
     }
 }

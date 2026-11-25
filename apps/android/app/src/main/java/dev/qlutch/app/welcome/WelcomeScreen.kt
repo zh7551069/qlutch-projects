@@ -41,9 +41,13 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.qlutch.app.R
+import dev.qlutch.app.ui.QlutchButton
 
 @Composable
-internal fun WelcomeScreen() {
+internal fun WelcomeScreen(
+    onStart: () -> Unit = {},
+    onExistingAccount: () -> Unit = {},
+) {
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -113,12 +117,14 @@ internal fun WelcomeScreen() {
                     container = WelcomeLayout.PRIMARY_COLOR,
                     labelColor = WelcomeLayout.PRIMARY_TEXT_COLOR,
                     borderColor = null,
+                    onClick = onStart,
                 )
                 WelcomeButton(
                     label = stringResource(R.string.welcome_existing_account),
                     container = WelcomeLayout.SECONDARY_COLOR,
                     labelColor = WelcomeLayout.SECONDARY_TEXT_COLOR,
                     borderColor = WelcomeLayout.SECONDARY_BORDER_COLOR,
+                    onClick = onExistingAccount,
                 )
                 CopyText(
                     text = stringResource(R.string.welcome_training_note),
@@ -193,40 +199,22 @@ private fun WelcomeButton(
     container: Long,
     labelColor: Long,
     borderColor: Long?,
+    onClick: () -> Unit,
 ) {
-    val shape = RoundedCornerShape(WelcomeLayout.BUTTON_RADIUS_DP.dp)
-    var modifier = Modifier
-        .widthIn(max = WelcomeLayout.BUTTON_WIDTH_DP.dp)
-        .fillMaxWidth()
-        .height(WelcomeLayout.BUTTON_HEIGHT_DP.dp)
-        .clip(shape)
-        .background(Color(container), shape)
-    if (borderColor != null) {
-        modifier = modifier.border(
-            WelcomeLayout.SECONDARY_BORDER_DP.dp,
-            Color(borderColor),
-            shape,
-        )
-    }
-    Box(
-        modifier = modifier.clickable(
-            interactionSource = remember { MutableInteractionSource() },
-            indication = null,
-            role = Role.Button,
-            onClick = {},
-        ),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            text = label,
-            style = welcomeTextStyle(
-                sizeSp = WelcomeLayout.BUTTON_TEXT_SIZE_SP,
-                color = labelColor,
-                fontFamily = WelcomeType.notoSemiBold,
-                fontWeight = FontWeight.SemiBold,
-            ),
-        )
-    }
+    QlutchButton(
+        label = label,
+        container = container,
+        labelColor = labelColor,
+        borderColor = borderColor,
+        borderDp = if (borderColor == null) 0 else WelcomeLayout.SECONDARY_BORDER_DP,
+        widthDp = WelcomeLayout.BUTTON_WIDTH_DP,
+        heightDp = WelcomeLayout.BUTTON_HEIGHT_DP,
+        radiusDp = WelcomeLayout.BUTTON_RADIUS_DP,
+        textSizeSp = WelcomeLayout.BUTTON_TEXT_SIZE_SP,
+        fontFamily = WelcomeType.notoSemiBold,
+        fontWeight = FontWeight.SemiBold,
+        onClick = onClick,
+    )
 }
 
 private fun welcomeTextStyle(

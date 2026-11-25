@@ -1,18 +1,44 @@
 import { getHealth } from '../generated/QlutchClient'
 import { API_BASE_URL } from '../config/ApiConfig'
+import { font } from '@kit.ArkUI'
+import { SplashView } from '../splash/SplashView'
+import { WelcomeView } from '../welcome/WelcomeView'
+import { FlowHost, NavBus } from '../flow/FlowHost'
+import { FlowLogic } from '../flow/FlowLogic'
 
 @Entry
 @Component
 struct Index {
   @State current: number = 0
   @State health: string = '尚未检查'
+  @State phase: string = 'splash'
+  @State purpose: string = FlowLogic.purposeRegister
+  private fontsReady: boolean = false
 
   aboutToAppear(): void {
+    if (!this.fontsReady) {
+      font.registerFont({ familyName: 'NotoSansSC-Regular', familySrc: $rawfile('fonts/noto_sans_sc_regular.ttf') })
+      font.registerFont({ familyName: 'NotoSansSC-Medium', familySrc: $rawfile('fonts/noto_sans_sc_medium.ttf') })
+      font.registerFont({ familyName: 'NotoSansSC-SemiBold', familySrc: $rawfile('fonts/noto_sans_sc_semibold.ttf') })
+      font.registerFont({ familyName: 'NotoSansSC-ExtraBold', familySrc: $rawfile('fonts/noto_sans_sc_extrabold.ttf') })
+      this.fontsReady = true
+    }
     getHealth(API_BASE_URL).then((result) => {
       this.health = `${result.statusCode} ${result.body.status}`
     }).catch(() => {
       this.health = '不可达'
     })
+  }
+
+  onBackPress(): boolean {
+    if (this.phase === 'splash') {
+      this.phase = 'welcome'
+      return true
+    }
+    if (this.phase === 'flow') {
+      return NavBus.back()
+    }
+    return false
   }
 
   @Builder
@@ -49,7 +75,8 @@ struct Index {
       .textAlign(TextAlign.Center)
   }
 
-  build() {
+  @Builder
+  shell() {
     Tabs({ barPosition: BarPosition.End, index: this.current }) {
       TabContent() {
         this.pageBody('首页')
@@ -79,5 +106,30 @@ struct Index {
     .onChange((index: number) => {
       this.current = index
     })
+  }
+
+  build() {
+    if (this.phase === 'splash') {
+      SplashView({ onDone: () => { this.phase = 'welcome' } })
+    } else if (this.phase === 'welcome') {
+      WelcomeView({
+        onStart: () => {
+          this.purpose = FlowLogic.purposeRegister
+          this.phase = 'flow'
+        },
+        onExisting: () => {
+          this.purpose = FlowLogic.purposeLogin
+          this.phase = 'flow'
+        }
+      })
+    } else if (this.phase === 'flow') {
+      FlowHost({
+        purpose: this.purpose,
+        onHome: () => { this.phase = 'home' },
+        onLeave: () => { this.phase = 'welcome' }
+      })
+    } else {
+      this.shell()
+    }
   }
 }
