@@ -53,22 +53,47 @@ function compileOperation(spec, method, path, operation) {
   if (!operation.operationId) {
     throw new Error(`${method.toUpperCase()} ${path} is missing operationId`)
   }
-  if (path.includes('{')) {
-    throw new Error(`${operation.operationId} has a path parameter, which this generator does not emit yet`)
-  }
   const headers = []
+  const declaredPath = new Map()
   for (const parameter of operation.parameters ?? []) {
     const resolved = resolveRef(spec, parameter)
     if (!resolved?.name || !resolved.in) {
       throw new Error(`${operation.operationId} has an unreadable parameter`)
     }
-    if (resolved.in !== 'header') {
-      throw new Error(`${operation.operationId} has a ${resolved.in} parameter, which this generator does not emit yet`)
+    if (resolved.in === 'header') {
+      headers.push({
+        name: resolved.name,
+        required: resolved.required === true,
+      })
+      continue
     }
-    headers.push({
-      name: resolved.name,
-      required: resolved.required === true,
-    })
+    if (resolved.in === 'path') {
+      if (resolved.schema?.type && resolved.schema.type !== 'string') {
+        throw new Error(`${operation.operationId} path parameter ${resolved.name} must be a string`)
+      }
+      if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(resolved.name)) {
+        throw new Error(`${operation.operationId} path parameter ${resolved.name} is not an identifier`)
+      }
+      declaredPath.set(resolved.name, { name: resolved.name, required: resolved.required !== false })
+      continue
+    }
+    throw new Error(`${operation.operationId} has a ${resolved.in} parameter, which this generator does not emit yet`)
+  }
+  const namesInPath = [...path.matchAll(/\{([^}]+)\}/g)].map((match) => match[1])
+  if (namesInPath.length > 1) {
+    throw new Error(`${operation.operationId} has more than one path parameter`)
+  }
+  const pathParams = namesInPath.map((name) => {
+    const declared = declaredPath.get(name)
+    if (!declared) {
+      throw new Error(`${operation.operationId} path {${name}} is not declared`)
+    }
+    return declared
+  })
+  for (const name of declaredPath.keys()) {
+    if (!namesInPath.includes(name)) {
+      throw new Error(`${operation.operationId} declares path parameter ${name} that is not in the path`)
+    }
   }
   let bodyName = null
   let bodyRequired = false
@@ -92,6 +117,7 @@ function compileOperation(spec, method, path, operation) {
     goName: exportName(operation.operationId),
     method: method.toUpperCase(),
     path,
+    pathParams,
     responseName,
     bodyName,
     bodyRequired,

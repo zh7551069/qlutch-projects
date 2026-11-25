@@ -71,7 +71,7 @@ func (h *Handler) verify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Authorization is ignored. A stale access token must not affect verify.
-	h.finish(w, r, h.svc.Verify(raw, r.RemoteAddr))
+	h.finish(w, r, h.svc.Verify(r.Context(), raw, r.RemoteAddr))
 }
 
 func (h *Handler) refresh(w http.ResponseWriter, r *http.Request) {
@@ -81,7 +81,7 @@ func (h *Handler) refresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Refresh uses the refresh token only. An expired access token is not consulted.
-	h.finish(w, r, h.svc.Refresh(raw))
+	h.finish(w, r, h.svc.Refresh(r.Context(), raw))
 }
 
 func (h *Handler) revoke(w http.ResponseWriter, r *http.Request) {
@@ -90,11 +90,11 @@ func (h *Handler) revoke(w http.ResponseWriter, r *http.Request) {
 		h.finish(w, r, Result{Err: codeErr("VALIDATION_MISSING_FIELD")})
 		return
 	}
-	h.finish(w, r, h.svc.Revoke(bearerToken(r), raw))
+	h.finish(w, r, h.svc.Revoke(r.Context(), bearerToken(r), raw))
 }
 
 func (h *Handler) onboarding(w http.ResponseWriter, r *http.Request) {
-	h.finish(w, r, h.svc.Onboarding(bearerToken(r)))
+	h.finish(w, r, h.svc.Onboarding(r.Context(), bearerToken(r)))
 }
 
 func (h *Handler) writeOnboarding(w http.ResponseWriter, r *http.Request) {
@@ -103,11 +103,11 @@ func (h *Handler) writeOnboarding(w http.ResponseWriter, r *http.Request) {
 		h.finish(w, r, Result{Err: codeErr("VALIDATION_MISSING_FIELD")})
 		return
 	}
-	h.finish(w, r, h.svc.WriteOnboarding(bearerToken(r), raw))
+	h.finish(w, r, h.svc.WriteOnboarding(r.Context(), bearerToken(r), raw))
 }
 
 func (h *Handler) profile(w http.ResponseWriter, r *http.Request) {
-	h.finish(w, r, h.svc.Profile(bearerToken(r)))
+	h.finish(w, r, h.svc.Profile(r.Context(), bearerToken(r)))
 }
 
 func (h *Handler) writeProfile(w http.ResponseWriter, r *http.Request) {
@@ -116,7 +116,7 @@ func (h *Handler) writeProfile(w http.ResponseWriter, r *http.Request) {
 		h.finish(w, r, Result{Err: codeErr("VALIDATION_MISSING_FIELD")})
 		return
 	}
-	h.finish(w, r, h.svc.UpdateProfile(bearerToken(r), raw))
+	h.finish(w, r, h.svc.UpdateProfile(r.Context(), bearerToken(r), raw))
 }
 
 func (h *Handler) finish(w http.ResponseWriter, r *http.Request, result Result) {

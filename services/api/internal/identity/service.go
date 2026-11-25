@@ -26,13 +26,15 @@ var (
 	purposes     = map[string]struct{}{"register": {}, "login": {}}
 )
 
-// Options configures the in-memory identity service.
+// Options configures the identity service.
 // Zero durations and counts use the documented defaults.
 // Code, when set, replaces the random code generator. Production leaves it nil.
+// Store persists accounts and sessions. Nil keeps those records in process memory.
 type Options struct {
 	Sender           Sender
 	Clock            Clock
 	Code             func() (string, error)
+	Store            Store
 	SendCooldown     time.Duration
 	SendBudget       int
 	SendWindow       time.Duration
@@ -51,23 +53,19 @@ type Options struct {
 
 // Service is the learner identity API.
 type Service struct {
-	mu           sync.Mutex
-	pepper       []byte
-	sender       Sender
-	clock        Clock
-	code         func() (string, error)
-	cfg          limits
-	usersByPhone map[string]*user
-	usersByID    map[string]*user
-	otps         map[string]*otpRecord
-	sessions     map[string]*session
-	accessIndex  map[[32]byte]string
-	refreshIndex map[[32]byte]string
-	idem         map[string]*idemRecord
-	sendPhone    *bucket
-	sendIP       *bucket
-	verifyPhone  *bucket
-	verifyIP     *bucket
+	mu          sync.Mutex
+	pepper      []byte
+	sender      Sender
+	clock       Clock
+	code        func() (string, error)
+	cfg         limits
+	accounts    Store
+	otps        map[string]*otpRecord
+	idem        map[string]*idemRecord
+	sendPhone   *bucket
+	sendIP      *bucket
+	verifyPhone *bucket
+	verifyIP    *bucket
 }
 
 type limits struct {
@@ -169,7 +167,7 @@ type profileBody struct {
 	Region *string `json:"region_code"`
 }
 
-// New builds an in-memory identity service.
+// New builds an identity service. A nil Store keeps accounts and sessions in process memory.
 func New(opts Options) (*Service, error) {
 	pepper := make([]byte, 32)
 	if _, err := rand.Read(pepper); err != nil {
@@ -187,23 +185,23 @@ func New(opts Options) (*Service, error) {
 	if code == nil {
 		code = randomCode
 	}
+	accounts := opts.Store
+	if accounts == nil {
+		accounts = newMemoryStore()
+	}
 	return &Service{
-		pepper:       pepper,
-		sender:       sender,
-		clock:        clock,
-		code:         code,
-		cfg:          limitsFrom(opts),
-		usersByPhone: map[string]*user{},
-		usersByID:    map[string]*user{},
-		otps:         map[string]*otpRecord{},
-		sessions:     map[string]*session{},
-		accessIndex:  map[[32]byte]string{},
-		refreshIndex: map[[32]byte]string{},
-		idem:         map[string]*idemRecord{},
-		sendPhone:    newBucket(),
-		sendIP:       newBucket(),
-		verifyPhone:  newBucket(),
-		verifyIP:     newBucket(),
+		pepper:      pepper,
+		sender:      sender,
+		clock:       clock,
+		code:        code,
+		cfg:         limitsFrom(opts),
+		accounts:    accounts,
+		otps:        map[string]*otpRecord{},
+		idem:        map[string]*idemRecord{},
+		sendPhone:   newBucket(),
+		sendIP:      newBucket(),
+		verifyPhone: newBucket(),
+		verifyIP:    newBucket(),
 	}, nil
 }
 
@@ -255,7 +253,7 @@ func (s *Service) Send(ctx context.Context, key string, raw []byte, remote strin
 	if fieldErr := validateContact(body.Region, body.Phone, body.Purpose, body.Locale); fieldErr != nil {
 		return s.remember(key, hash, Result{Err: fieldErr})
 	}
-	if gate := s.accountGate(body.Region, body.Phone, body.Purpose); gate != nil {
+	if gate := s.accountGate(ctx, body.Region, body.Phone, body.Purpose); gate != nil {
 		return s.remember(key, hash, Result{Err: gate})
 	}
 	phoneKey := phoneKey(body.Region, body.Phone)
@@ -299,7 +297,7 @@ func (s *Service) Send(ctx context.Context, key string, raw []byte, remote strin
 }
 
 // Verify checks a code and issues a session. The access token is not an input.
-func (s *Service) Verify(raw []byte, remote string) Result {
+func (s *Service) Verify(ctx context.Context, raw []byte, remote string) Result {
 	var body otpVerifyBody
 	if decErr := decodeObject(raw, &body); decErr != nil {
 		return Result{Err: decErr}
@@ -315,7 +313,7 @@ func (s *Service) Verify(raw []byte, remote string) Result {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if gate := s.accountGate(body.Region, body.Phone, body.Purpose); gate != nil {
+	if gate := s.accountGate(ctx, body.Region, body.Phone, body.Purpose); gate != nil {
 		return Result{Err: gate}
 	}
 	phoneKey := phoneKey(body.Region, body.Phone)
@@ -341,10 +339,10 @@ func (s *Service) Verify(raw []byte, remote string) Result {
 		}
 		return Result{Err: codeErr("AUTH_OTP_INVALID")}
 	}
-	return s.commitVerify(body, phoneKey)
+	return s.commitVerify(ctx, body, phoneKey)
 }
 
-func (s *Service) commitVerify(body otpVerifyBody, phoneKey string) Result {
+func (s *Service) commitVerify(ctx context.Context, body otpVerifyBody, phoneKey string) Result {
 	locale := defaultLocale
 	if body.Locale != nil {
 		locale = *body.Locale
@@ -360,31 +358,43 @@ func (s *Service) commitVerify(body otpVerifyBody, phoneKey string) Result {
 			RegionPref:    body.Region,
 			Answers:       map[string]string{},
 		}
+		if err := s.accounts.Insert(ctx, account); err != nil {
+			if errors.Is(err, errAccountExists) {
+				return Result{Err: codeErr("AUTH_ACCOUNT_EXISTS")}
+			}
+			return Result{Err: codeErr("INTERNAL")}
+		}
 		created = true
 	} else {
-		account = s.usersByPhone[phoneKey]
-		if account == nil {
+		found, err := s.accounts.FindByPhone(ctx, body.Region, body.Phone)
+		if err != nil {
+			return Result{Err: codeErr("INTERNAL")}
+		}
+		if found == nil {
 			return Result{Err: codeErr("AUTH_ACCOUNT_NOT_FOUND")}
 		}
+		account = found
 		if body.Locale != nil {
 			account.Locale = locale
 		}
 		account.RegionPref = body.Region
+		if err := s.accounts.SaveProfile(ctx, account.ID, account.Locale, account.RegionPref); err != nil {
+			return Result{Err: codeErr("INTERNAL")}
+		}
 	}
-	issued, err := s.issue(account, created)
+	issued, err := s.issue(ctx, account, created)
 	if err != nil {
+		if created {
+			_ = s.accounts.DeleteAccount(ctx, account.ID)
+		}
 		return Result{Err: codeErr("INTERNAL")}
-	}
-	if created {
-		s.usersByID[account.ID] = account
-		s.usersByPhone[phoneKey] = account
 	}
 	delete(s.otps, otpKey(phoneKey, body.Purpose))
 	return issued
 }
 
 // Refresh rotates a refresh token. It does not read the access token.
-func (s *Service) Refresh(raw []byte) Result {
+func (s *Service) Refresh(ctx context.Context, raw []byte) Result {
 	var body refreshBody
 	if decErr := decodeObject(raw, &body); decErr != nil {
 		return Result{Err: decErr}
@@ -394,17 +404,25 @@ func (s *Service) Refresh(raw []byte) Result {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	sess := s.sessionByHash(s.refreshIndex, body.RefreshToken)
+	sess, err := s.sessionByHash(ctx, false, body.RefreshToken)
+	if err != nil {
+		return Result{Err: codeErr("INTERNAL")}
+	}
 	now := s.clock.Now()
 	if sess == nil || sess.Revoked || !now.Before(sess.RefreshExpiry) {
 		return Result{Err: codeErr("AUTH_EXPIRED")}
 	}
-	account := s.usersByID[sess.UserID]
+	account, err := s.accounts.FindByID(ctx, sess.UserID)
+	if err != nil {
+		return Result{Err: codeErr("INTERNAL")}
+	}
 	if account == nil {
 		return Result{Err: codeErr("AUTH_EXPIRED")}
 	}
-	s.dropTokens(sess)
-	issued, err := s.issue(account, false)
+	if err := s.dropTokens(ctx, sess); err != nil {
+		return Result{Err: codeErr("INTERNAL")}
+	}
+	issued, err := s.issue(ctx, account, false)
 	if err != nil {
 		return Result{Err: codeErr("INTERNAL")}
 	}
@@ -413,7 +431,7 @@ func (s *Service) Refresh(raw []byte) Result {
 
 // Revoke drops the session for an access token, a refresh token, or both.
 // An unknown token still succeeds so logout can be repeated.
-func (s *Service) Revoke(accessToken string, raw []byte) Result {
+func (s *Service) Revoke(ctx context.Context, accessToken string, raw []byte) Result {
 	if strings.HasPrefix(accessToken, prefixInternal) {
 		return Result{Err: codeErr("AUTH_WRONG_REALM")}
 	}
@@ -434,25 +452,35 @@ func (s *Service) Revoke(accessToken string, raw []byte) Result {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if accessToken != "" {
-		if sess := s.sessionByHash(s.accessIndex, accessToken); sess != nil {
-			s.dropTokens(sess)
-			sess.Revoked = true
+		sess, err := s.sessionByHash(ctx, true, accessToken)
+		if err != nil {
+			return Result{Err: codeErr("INTERNAL")}
+		}
+		if sess != nil {
+			if err := s.dropTokens(ctx, sess); err != nil {
+				return Result{Err: codeErr("INTERNAL")}
+			}
 		}
 	}
 	if strings.TrimSpace(refresh) != "" {
-		if sess := s.sessionByHash(s.refreshIndex, refresh); sess != nil {
-			s.dropTokens(sess)
-			sess.Revoked = true
+		sess, err := s.sessionByHash(ctx, false, refresh)
+		if err != nil {
+			return Result{Err: codeErr("INTERNAL")}
+		}
+		if sess != nil {
+			if err := s.dropTokens(ctx, sess); err != nil {
+				return Result{Err: codeErr("INTERNAL")}
+			}
 		}
 	}
 	return Result{Status: 204}
 }
 
 // Onboarding returns the 7-step state for an access token.
-func (s *Service) Onboarding(accessToken string) Result {
+func (s *Service) Onboarding(ctx context.Context, accessToken string) Result {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	account, err := s.authenticate(accessToken)
+	account, err := s.authenticate(ctx, accessToken)
 	if err != nil {
 		return Result{Err: err}
 	}
@@ -460,10 +488,10 @@ func (s *Service) Onboarding(accessToken string) Result {
 }
 
 // WriteOnboarding stores the current step or rewrites a finished step.
-func (s *Service) WriteOnboarding(accessToken string, raw []byte) Result {
+func (s *Service) WriteOnboarding(ctx context.Context, accessToken string, raw []byte) Result {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	account, err := s.authenticate(accessToken)
+	account, err := s.authenticate(ctx, accessToken)
 	if err != nil {
 		return Result{Err: err}
 	}
@@ -488,7 +516,9 @@ func (s *Service) WriteOnboarding(accessToken string, raw []byte) Result {
 		if nickErr := validateNickname(trimmed, s.cfg.nicknameMaxRunes); nickErr != nil {
 			return Result{Err: nickErr}
 		}
-		account.Answers["nickname"] = trimmed
+		if saveErr := s.saveAnswer(ctx, account, "nickname", trimmed); saveErr != nil {
+			return Result{Err: saveErr}
+		}
 	} else {
 		if body.Answer == nil {
 			return Result{Err: codeErr("VALIDATION_MISSING_FIELD")}
@@ -497,16 +527,18 @@ func (s *Service) WriteOnboarding(accessToken string, raw []byte) Result {
 		if answerErr := validateAnswer(trimmed, s.cfg.answerMaxBytes); answerErr != nil {
 			return Result{Err: answerErr}
 		}
-		account.Answers[body.StepID] = trimmed
+		if saveErr := s.saveAnswer(ctx, account, body.StepID, trimmed); saveErr != nil {
+			return Result{Err: saveErr}
+		}
 	}
 	return s.marshal(s.onboardingView(account, false))
 }
 
 // Profile returns locale and region preference.
-func (s *Service) Profile(accessToken string) Result {
+func (s *Service) Profile(ctx context.Context, accessToken string) Result {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	account, err := s.authenticate(accessToken)
+	account, err := s.authenticate(ctx, accessToken)
 	if err != nil {
 		return Result{Err: err}
 	}
@@ -514,10 +546,10 @@ func (s *Service) Profile(accessToken string) Result {
 }
 
 // UpdateProfile changes locale, region preference, or both. It does not change the bound phone.
-func (s *Service) UpdateProfile(accessToken string, raw []byte) Result {
+func (s *Service) UpdateProfile(ctx context.Context, accessToken string, raw []byte) Result {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	account, err := s.authenticate(accessToken)
+	account, err := s.authenticate(ctx, accessToken)
 	if err != nil {
 		return Result{Err: err}
 	}
@@ -544,24 +576,79 @@ func (s *Service) UpdateProfile(accessToken string, raw []byte) Result {
 	if body.Region != nil {
 		account.RegionPref = *body.Region
 	}
+	if err := s.accounts.SaveProfile(ctx, account.ID, account.Locale, account.RegionPref); err != nil {
+		return Result{Err: codeErr("INTERNAL")}
+	}
 	return s.marshal(profileView{Locale: account.Locale, Region: account.RegionPref})
+}
+
+// AccountSnapshot is the learner summary embedded by other domains.
+// IsNewUser is false here. That flag is true only on the verify response that created the account.
+type AccountSnapshot struct {
+	UserID              string
+	IsNewUser           bool
+	OnboardingCompleted bool
+	HasFirstPack        bool
+	NextStep            string
+}
+
+// AccountFromAccess authenticates a learner access token and returns the current summary.
+// NextStep still follows H3. H3 is an implementation assumption, not a confirmed product rule.
+func (s *Service) AccountFromAccess(ctx context.Context, accessToken string) (AccountSnapshot, *Error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	account, err := s.authenticate(ctx, accessToken)
+	if err != nil {
+		return AccountSnapshot{}, err
+	}
+	return snapshotOf(account), nil
+}
+
+// CompleteFirstPack records that the first-pack step is done.
+// It never clears the flag. It is not an HTTP route.
+func (s *Service) CompleteFirstPack(ctx context.Context, userID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	account, err := s.accounts.FindByID(ctx, userID)
+	if err != nil {
+		return err
+	}
+	if account == nil {
+		return errors.New("account missing")
+	}
+	if account.HasFirstPack {
+		return nil
+	}
+	return s.accounts.SaveFirstPack(ctx, userID, true)
+}
+
+func snapshotOf(account *user) AccountSnapshot {
+	return AccountSnapshot{
+		UserID:              account.ID,
+		IsNewUser:           false,
+		OnboardingCompleted: firstIncomplete(account) < 0,
+		HasFirstPack:        account.HasFirstPack,
+		NextStep:            nextStepOf(account),
+	}
 }
 
 // TestingSetFirstPack sets the knowledge-domain flag used by next_step.
 // It is not an HTTP endpoint. H3 is an implementation assumption, not a confirmed product rule.
-func (s *Service) TestingSetFirstPack(userID string, has bool) bool {
+func (s *Service) TestingSetFirstPack(ctx context.Context, userID string, has bool) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	account := s.usersByID[userID]
-	if account == nil {
+	account, err := s.accounts.FindByID(ctx, userID)
+	if err != nil || account == nil {
 		return false
 	}
-	account.HasFirstPack = has
+	if err := s.accounts.SaveFirstPack(ctx, userID, has); err != nil {
+		return false
+	}
 	return true
 }
 
 // TestingInsertUser creates an account without an OTP. Tests use it for the verify race.
-func (s *Service) TestingInsertUser(region, national string) string {
+func (s *Service) TestingInsertUser(ctx context.Context, region, national string) string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	account := &user{
@@ -572,30 +659,48 @@ func (s *Service) TestingInsertUser(region, national string) string {
 		RegionPref:    region,
 		Answers:       map[string]string{},
 	}
-	s.usersByID[account.ID] = account
-	s.usersByPhone[phoneKey(region, national)] = account
+	if err := s.accounts.Insert(ctx, account); err != nil {
+		return ""
+	}
 	return account.ID
 }
 
-func (s *Service) authenticate(token string) (*user, *Error) {
+func (s *Service) authenticate(ctx context.Context, token string) (*user, *Error) {
 	if token == "" {
 		return nil, codeErr("AUTH_REQUIRED")
 	}
 	if strings.HasPrefix(token, prefixInternal) {
 		return nil, codeErr("AUTH_WRONG_REALM")
 	}
-	sess := s.sessionByHash(s.accessIndex, token)
+	sess, err := s.sessionByHash(ctx, true, token)
+	if err != nil {
+		return nil, codeErr("INTERNAL")
+	}
 	if sess == nil || sess.Revoked || !s.clock.Now().Before(sess.AccessExpiry) {
 		return nil, codeErr("AUTH_EXPIRED")
 	}
-	account := s.usersByID[sess.UserID]
+	account, err := s.accounts.FindByID(ctx, sess.UserID)
+	if err != nil {
+		return nil, codeErr("INTERNAL")
+	}
 	if account == nil {
 		return nil, codeErr("AUTH_EXPIRED")
 	}
 	return account, nil
 }
 
-func (s *Service) issue(account *user, isNew bool) (Result, error) {
+func (s *Service) saveAnswer(ctx context.Context, account *user, step, answer string) *Error {
+	if account.Answers == nil {
+		account.Answers = map[string]string{}
+	}
+	if err := s.accounts.SaveAnswer(ctx, account.ID, step, answer); err != nil {
+		return codeErr("INTERNAL")
+	}
+	account.Answers[step] = answer
+	return nil
+}
+
+func (s *Service) issue(ctx context.Context, account *user, isNew bool) (Result, error) {
 	access, accessHash, err := newToken(prefixAccess)
 	if err != nil {
 		return Result{}, err
@@ -613,9 +718,9 @@ func (s *Service) issue(account *user, isNew bool) (Result, error) {
 		AccessExpiry:  now.Add(s.cfg.accessTTL),
 		RefreshExpiry: now.Add(s.cfg.refreshTTL),
 	}
-	s.sessions[sess.ID] = sess
-	s.accessIndex[accessHash] = sess.ID
-	s.refreshIndex[refreshHash] = sess.ID
+	if err := s.accounts.InsertSession(ctx, sess); err != nil {
+		return Result{}, err
+	}
 	secs := int64(s.cfg.accessTTL / time.Second)
 	if secs < 1 {
 		secs = 1
@@ -629,29 +734,34 @@ func (s *Service) issue(account *user, isNew bool) (Result, error) {
 		Profile:      profileView{Locale: account.Locale, Region: account.RegionPref},
 	})
 	if err != nil {
+		_ = s.accounts.DeleteSession(ctx, sess.ID)
 		return Result{}, err
 	}
 	return Result{Status: 200, Body: payload}, nil
 }
 
-func (s *Service) dropTokens(sess *session) {
-	delete(s.accessIndex, sess.AccessHash)
-	delete(s.refreshIndex, sess.RefreshHash)
-	delete(s.sessions, sess.ID)
-	sess.Revoked = true
-}
-
-func (s *Service) sessionByHash(index map[[32]byte]string, token string) *session {
-	sum := sha256.Sum256([]byte(token))
-	id, ok := index[sum]
-	if !ok {
-		return nil
+func (s *Service) dropTokens(ctx context.Context, sess *session) error {
+	if err := s.accounts.DeleteSession(ctx, sess.ID); err != nil {
+		return err
 	}
-	return s.sessions[id]
+	sess.Revoked = true
+	return nil
 }
 
-func (s *Service) accountGate(region, phone, purpose string) *Error {
-	_, exists := s.usersByPhone[phoneKey(region, phone)]
+func (s *Service) sessionByHash(ctx context.Context, access bool, token string) (*session, error) {
+	sum := sha256.Sum256([]byte(token))
+	if access {
+		return s.accounts.FindSessionByAccess(ctx, sum)
+	}
+	return s.accounts.FindSessionByRefresh(ctx, sum)
+}
+
+func (s *Service) accountGate(ctx context.Context, region, phone, purpose string) *Error {
+	account, err := s.accounts.FindByPhone(ctx, region, phone)
+	if err != nil {
+		return codeErr("INTERNAL")
+	}
+	exists := account != nil
 	if purpose == "register" && exists {
 		return codeErr("AUTH_ACCOUNT_EXISTS")
 	}

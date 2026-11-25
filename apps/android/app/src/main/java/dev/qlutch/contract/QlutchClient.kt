@@ -52,6 +52,24 @@ object StepIdValues {
     const val StepIdDailyTime: String = "daily_time"
 }
 
+typealias MaterialSource = String
+
+object MaterialSourceValues {
+    const val MaterialSourceCamera: String = "camera"
+    const val MaterialSourceFile: String = "file"
+    const val MaterialSourcePasteNote: String = "paste_note"
+}
+
+typealias JobStatus = String
+
+object JobStatusValues {
+    const val JobStatusAccepted: String = "accepted"
+    const val JobStatusRunning: String = "running"
+    const val JobStatusMapReady: String = "map_ready"
+    const val JobStatusFailedRetryable: String = "failed_retryable"
+    const val JobStatusFailedTerminal: String = "failed_terminal"
+}
+
 class HealthStatus(
     val status: String
 ) {
@@ -91,7 +109,7 @@ fun parseReadyStatus(text: String): ReadyStatus {
 fun parseReadyStatusObject(root: JSONObject): ReadyStatus {
     return ReadyStatus(
         root.getString("status"),
-        if (root.has("checks") && !root.isNull("checks")) readStringMap(root, "checks") else null
+        if (root.has("checks") && !root.isNull("checks")) readStringMap(root, "checks") ?: emptyMap() else null
     )
 }
 
@@ -422,6 +440,235 @@ fun parseOnboardingWriteRequestObject(root: JSONObject): OnboardingWriteRequest 
     )
 }
 
+class KnowledgePackCreateRequest {
+    fun toJSON(): JSONObject {
+        return JSONObject()
+    }
+}
+
+fun parseKnowledgePackCreateRequest(text: String): KnowledgePackCreateRequest {
+    return parseKnowledgePackCreateRequestObject(JSONObject(text))
+}
+
+fun parseKnowledgePackCreateRequestObject(root: JSONObject): KnowledgePackCreateRequest {
+    return KnowledgePackCreateRequest()
+}
+
+class KnowledgePack(
+    val pack_id: String,
+    val account: AccountSummary,
+    val next_step: String
+) {
+    fun toJSON(): JSONObject {
+        val out = JSONObject()
+        out.put("pack_id", pack_id)
+    out.put("account", account.toJSON())
+    out.put("next_step", next_step)
+        return out
+    }
+}
+
+fun parseKnowledgePack(text: String): KnowledgePack {
+    return parseKnowledgePackObject(JSONObject(text))
+}
+
+fun parseKnowledgePackObject(root: JSONObject): KnowledgePack {
+    return KnowledgePack(
+        root.getString("pack_id"),
+        parseAccountSummaryObject(root.getJSONObject("account")),
+        root.getString("next_step")
+    )
+}
+
+class MaterialUploadUrlRequest(
+    val pack_id: String,
+    val source: String,
+    val content_type: String,
+    val byte_size: Long,
+    val filename: String?
+) {
+    fun toJSON(): JSONObject {
+        val out = JSONObject()
+        out.put("pack_id", pack_id)
+    out.put("source", source)
+    out.put("content_type", content_type)
+    out.put("byte_size", byte_size)
+    if (filename != null) out.put("filename", filename)
+        return out
+    }
+}
+
+fun parseMaterialUploadUrlRequest(text: String): MaterialUploadUrlRequest {
+    return parseMaterialUploadUrlRequestObject(JSONObject(text))
+}
+
+fun parseMaterialUploadUrlRequestObject(root: JSONObject): MaterialUploadUrlRequest {
+    return MaterialUploadUrlRequest(
+        root.getString("pack_id"),
+        root.getString("source"),
+        root.getString("content_type"),
+        root.getLong("byte_size"),
+        if (root.has("filename") && !root.isNull("filename")) root.getString("filename") else null
+    )
+}
+
+class MaterialUploadUrlResponse(
+    val material_id: String,
+    val pack_id: String,
+    val source: String,
+    val upload_url: String,
+    val upload_method: String,
+    val upload_headers: Map<String, String>,
+    val expires_in: Long,
+    val account: AccountSummary,
+    val next_step: String
+) {
+    fun toJSON(): JSONObject {
+        val out = JSONObject()
+        out.put("material_id", material_id)
+    out.put("pack_id", pack_id)
+    out.put("source", source)
+    out.put("upload_url", upload_url)
+    out.put("upload_method", upload_method)
+    out.put("upload_headers", upload_headers)
+    out.put("expires_in", expires_in)
+    out.put("account", account.toJSON())
+    out.put("next_step", next_step)
+        return out
+    }
+}
+
+fun parseMaterialUploadUrlResponse(text: String): MaterialUploadUrlResponse {
+    return parseMaterialUploadUrlResponseObject(JSONObject(text))
+}
+
+fun parseMaterialUploadUrlResponseObject(root: JSONObject): MaterialUploadUrlResponse {
+    return MaterialUploadUrlResponse(
+        root.getString("material_id"),
+        root.getString("pack_id"),
+        root.getString("source"),
+        root.getString("upload_url"),
+        root.getString("upload_method"),
+        readStringMap(root, "upload_headers") ?: emptyMap(),
+        root.getLong("expires_in"),
+        parseAccountSummaryObject(root.getJSONObject("account")),
+        root.getString("next_step")
+    )
+}
+
+class ImportRequest(
+    val pack_id: String,
+    val material_id: String
+) {
+    fun toJSON(): JSONObject {
+        val out = JSONObject()
+        out.put("pack_id", pack_id)
+    out.put("material_id", material_id)
+        return out
+    }
+}
+
+fun parseImportRequest(text: String): ImportRequest {
+    return parseImportRequestObject(JSONObject(text))
+}
+
+fun parseImportRequestObject(root: JSONObject): ImportRequest {
+    return ImportRequest(
+        root.getString("pack_id"),
+        root.getString("material_id")
+    )
+}
+
+class KnowledgeJob(
+    val job_id: String,
+    val pack_id: String,
+    val material_id: String,
+    val source: String,
+    val status: String,
+    val map_ready: Boolean,
+    val retryable: Boolean,
+    val progress_message: String?,
+    val failure_code: String?,
+    val failure_message: String?,
+    val account: AccountSummary,
+    val next_step: String
+) {
+    fun toJSON(): JSONObject {
+        val out = JSONObject()
+        out.put("job_id", job_id)
+    out.put("pack_id", pack_id)
+    out.put("material_id", material_id)
+    out.put("source", source)
+    out.put("status", status)
+    out.put("map_ready", map_ready)
+    out.put("retryable", retryable)
+    if (progress_message != null) out.put("progress_message", progress_message)
+    if (failure_code != null) out.put("failure_code", failure_code)
+    if (failure_message != null) out.put("failure_message", failure_message)
+    out.put("account", account.toJSON())
+    out.put("next_step", next_step)
+        return out
+    }
+}
+
+fun parseKnowledgeJob(text: String): KnowledgeJob {
+    return parseKnowledgeJobObject(JSONObject(text))
+}
+
+fun parseKnowledgeJobObject(root: JSONObject): KnowledgeJob {
+    return KnowledgeJob(
+        root.getString("job_id"),
+        root.getString("pack_id"),
+        root.getString("material_id"),
+        root.getString("source"),
+        root.getString("status"),
+        root.getBoolean("map_ready"),
+        root.getBoolean("retryable"),
+        if (root.has("progress_message") && !root.isNull("progress_message")) root.getString("progress_message") else null,
+        if (root.has("failure_code") && !root.isNull("failure_code")) root.getString("failure_code") else null,
+        if (root.has("failure_message") && !root.isNull("failure_message")) root.getString("failure_message") else null,
+        parseAccountSummaryObject(root.getJSONObject("account")),
+        root.getString("next_step")
+    )
+}
+
+class FirstPackSkipRequest {
+    fun toJSON(): JSONObject {
+        return JSONObject()
+    }
+}
+
+fun parseFirstPackSkipRequest(text: String): FirstPackSkipRequest {
+    return parseFirstPackSkipRequestObject(JSONObject(text))
+}
+
+fun parseFirstPackSkipRequestObject(root: JSONObject): FirstPackSkipRequest {
+    return FirstPackSkipRequest()
+}
+
+class FirstPackSkipResponse(
+    val account: AccountSummary,
+    val next_step: String
+) {
+    fun toJSON(): JSONObject {
+        val out = JSONObject()
+        out.put("account", account.toJSON())
+    out.put("next_step", next_step)
+        return out
+    }
+}
+
+fun parseFirstPackSkipResponse(text: String): FirstPackSkipResponse {
+    return parseFirstPackSkipResponseObject(JSONObject(text))
+}
+
+fun parseFirstPackSkipResponseObject(root: JSONObject): FirstPackSkipResponse {
+    return FirstPackSkipResponse(
+        parseAccountSummaryObject(root.getJSONObject("account")),
+        root.getString("next_step")
+    )
+}
+
 class ErrorBody(
     val error: ErrorBodyError,
     val request_id: String
@@ -557,6 +804,53 @@ class QlutchClient(private val baseUrl: String) {
         if (bearer.isNotEmpty()) headers["Authorization"] = "Bearer $bearer"
         val raw = request("PUT", "/v1/identity/profile", body.toJSON().toString(), headers)
         val parsed = parseIdentityProfile(raw.text)
+        return ApiResponse(raw.statusCode, parsed, raw.requestId)
+    }
+
+    fun createKnowledgePack(body: KnowledgePackCreateRequest? = null, requestId: String = "", bearer: String = ""): ApiResponse<KnowledgePack> {
+        val headers = linkedMapOf<String, String>()
+        if (requestId.isNotEmpty()) headers["X-Request-Id"] = requestId
+        if (bearer.isNotEmpty()) headers["Authorization"] = "Bearer $bearer"
+        val raw = request("POST", "/v1/knowledge/packs", body?.toJSON()?.toString(), headers)
+        val parsed = parseKnowledgePack(raw.text)
+        return ApiResponse(raw.statusCode, parsed, raw.requestId)
+    }
+
+    fun createKnowledgeMaterialUploadUrl(body: MaterialUploadUrlRequest, requestId: String = "", bearer: String = ""): ApiResponse<MaterialUploadUrlResponse> {
+        val headers = linkedMapOf<String, String>()
+        if (requestId.isNotEmpty()) headers["X-Request-Id"] = requestId
+        if (bearer.isNotEmpty()) headers["Authorization"] = "Bearer $bearer"
+        val raw = request("POST", "/v1/knowledge/materials/upload-url", body.toJSON().toString(), headers)
+        val parsed = parseMaterialUploadUrlResponse(raw.text)
+        return ApiResponse(raw.statusCode, parsed, raw.requestId)
+    }
+
+    fun createKnowledgeImport(idempotencyKey: String, body: ImportRequest, requestId: String = "", bearer: String = ""): ApiResponse<KnowledgeJob> {
+        val headers = linkedMapOf<String, String>()
+        headers["Idempotency-Key"] = idempotencyKey
+        if (requestId.isNotEmpty()) headers["X-Request-Id"] = requestId
+        if (bearer.isNotEmpty()) headers["Authorization"] = "Bearer $bearer"
+        val raw = request("POST", "/v1/knowledge/imports", body.toJSON().toString(), headers)
+        val parsed = parseKnowledgeJob(raw.text)
+        return ApiResponse(raw.statusCode, parsed, raw.requestId)
+    }
+
+    fun getKnowledgeJob(id: String, requestId: String = "", bearer: String = ""): ApiResponse<KnowledgeJob> {
+        val headers = linkedMapOf<String, String>()
+        if (requestId.isNotEmpty()) headers["X-Request-Id"] = requestId
+        if (bearer.isNotEmpty()) headers["Authorization"] = "Bearer $bearer"
+        val raw = request("GET", "/v1/knowledge/jobs/" + java.net.URLEncoder.encode(id, java.nio.charset.StandardCharsets.UTF_8).replace("+", "%20") + "", null, headers)
+        val parsed = parseKnowledgeJob(raw.text)
+        return ApiResponse(raw.statusCode, parsed, raw.requestId)
+    }
+
+    fun skipKnowledgeFirstPack(idempotencyKey: String, body: FirstPackSkipRequest? = null, requestId: String = "", bearer: String = ""): ApiResponse<FirstPackSkipResponse> {
+        val headers = linkedMapOf<String, String>()
+        headers["Idempotency-Key"] = idempotencyKey
+        if (requestId.isNotEmpty()) headers["X-Request-Id"] = requestId
+        if (bearer.isNotEmpty()) headers["Authorization"] = "Bearer $bearer"
+        val raw = request("POST", "/v1/knowledge/first-pack/skip", body?.toJSON()?.toString(), headers)
+        val parsed = parseFirstPackSkipResponse(raw.text)
         return ApiResponse(raw.statusCode, parsed, raw.requestId)
     }
 

@@ -90,6 +90,18 @@ public let StepIdHowToAddress: StepId = "how_to_address"
 public let StepIdExamTrack: StepId = "exam_track"
 public let StepIdDailyTime: StepId = "daily_time"
 
+public typealias MaterialSource = String
+public let MaterialSourceCamera: MaterialSource = "camera"
+public let MaterialSourceFile: MaterialSource = "file"
+public let MaterialSourcePasteNote: MaterialSource = "paste_note"
+
+public typealias JobStatus = String
+public let JobStatusAccepted: JobStatus = "accepted"
+public let JobStatusRunning: JobStatus = "running"
+public let JobStatusMapReady: JobStatus = "map_ready"
+public let JobStatusFailedRetryable: JobStatus = "failed_retryable"
+public let JobStatusFailedTerminal: JobStatus = "failed_terminal"
+
 public struct HealthStatus: Codable, Sendable {
     public let status: String
 }
@@ -185,6 +197,66 @@ public struct OnboardingWriteRequest: Codable, Sendable {
     public let answer: String?
 }
 
+public struct KnowledgePackCreateRequest: Codable, Sendable {
+
+}
+
+public struct KnowledgePack: Codable, Sendable {
+    public let pack_id: String
+    public let account: AccountSummary
+    public let next_step: NextStep
+}
+
+public struct MaterialUploadUrlRequest: Codable, Sendable {
+    public let pack_id: String
+    public let source: MaterialSource
+    public let content_type: String
+    public let byte_size: Int
+    public let filename: String?
+}
+
+public let MaterialUploadUrlResponseUpload_methodPUT = "PUT"
+public struct MaterialUploadUrlResponse: Codable, Sendable {
+    public let material_id: String
+    public let pack_id: String
+    public let source: MaterialSource
+    public let upload_url: String
+    public let upload_method: String
+    public let upload_headers: [String: String]
+    public let expires_in: Int
+    public let account: AccountSummary
+    public let next_step: NextStep
+}
+
+public struct ImportRequest: Codable, Sendable {
+    public let pack_id: String
+    public let material_id: String
+}
+
+public struct KnowledgeJob: Codable, Sendable {
+    public let job_id: String
+    public let pack_id: String
+    public let material_id: String
+    public let source: MaterialSource
+    public let status: JobStatus
+    public let map_ready: Bool
+    public let retryable: Bool
+    public let progress_message: String?
+    public let failure_code: String?
+    public let failure_message: String?
+    public let account: AccountSummary
+    public let next_step: NextStep
+}
+
+public struct FirstPackSkipRequest: Codable, Sendable {
+
+}
+
+public struct FirstPackSkipResponse: Codable, Sendable {
+    public let account: AccountSummary
+    public let next_step: NextStep
+}
+
 public struct ErrorBody: Codable, Sendable {
     public let error: ErrorBodyError
     public let request_id: String
@@ -209,6 +281,12 @@ public let ErrorBodyErrorCodeVALIDATIONNICKNAME = "VALIDATION_NICKNAME"
 public let ErrorBodyErrorCodeVALIDATIONINVALIDSTEP = "VALIDATION_INVALID_STEP"
 public let ErrorBodyErrorCodeVALIDATIONINVALIDSTEPANSWER = "VALIDATION_INVALID_STEP_ANSWER"
 public let ErrorBodyErrorCodeVALIDATIONSTEPOUTOFORDER = "VALIDATION_STEP_OUT_OF_ORDER"
+public let ErrorBodyErrorCodeVALIDATIONINVALIDSOURCE = "VALIDATION_INVALID_SOURCE"
+public let ErrorBodyErrorCodeVALIDATIONUNSUPPORTEDMEDIA = "VALIDATION_UNSUPPORTED_MEDIA"
+public let ErrorBodyErrorCodeVALIDATIONMEDIATOOLARGE = "VALIDATION_MEDIA_TOO_LARGE"
+public let ErrorBodyErrorCodeVALIDATIONMATERIALNOTUPLOADED = "VALIDATION_MATERIAL_NOT_UPLOADED"
+public let ErrorBodyErrorCodeNOTFOUND = "NOT_FOUND"
+public let ErrorBodyErrorCodeCONFLICT = "CONFLICT"
 public let ErrorBodyErrorCodeIDEMPOTENCYKEYMISMATCH = "IDEMPOTENCY_KEY_MISMATCH"
 public let ErrorBodyErrorCodeRATELIMITED = "RATE_LIMITED"
 public let ErrorBodyErrorCodeINTERNAL = "INTERNAL"
@@ -304,6 +382,47 @@ public struct QlutchClient: Sendable {
         if !requestID.isEmpty { header["X-Request-Id"] = requestID }
         if !bearer.isEmpty { header["Authorization"] = "Bearer \(bearer)" }
         return try await request(method: "PUT", path: "/v1/identity/profile", body: payload, headers: header)
+    }
+
+    public func createKnowledgePack(body: KnowledgePackCreateRequest? = nil, requestID: String = "", bearer: String = "") async throws -> APIResponse<KnowledgePack> {
+        let payload: Data? = if let body { try JSONEncoder().encode(body) } else { nil }
+        var header: [String: String] = [:]
+        if !requestID.isEmpty { header["X-Request-Id"] = requestID }
+        if !bearer.isEmpty { header["Authorization"] = "Bearer \(bearer)" }
+        return try await request(method: "POST", path: "/v1/knowledge/packs", body: payload, headers: header)
+    }
+
+    public func createKnowledgeMaterialUploadUrl(body: MaterialUploadUrlRequest, requestID: String = "", bearer: String = "") async throws -> APIResponse<MaterialUploadUrlResponse> {
+        let payload = try JSONEncoder().encode(body)
+        var header: [String: String] = [:]
+        if !requestID.isEmpty { header["X-Request-Id"] = requestID }
+        if !bearer.isEmpty { header["Authorization"] = "Bearer \(bearer)" }
+        return try await request(method: "POST", path: "/v1/knowledge/materials/upload-url", body: payload, headers: header)
+    }
+
+    public func createKnowledgeImport(idempotencyKey: String, body: ImportRequest, requestID: String = "", bearer: String = "") async throws -> APIResponse<KnowledgeJob> {
+        let payload = try JSONEncoder().encode(body)
+        var header: [String: String] = [:]
+        if !idempotencyKey.isEmpty { header["Idempotency-Key"] = idempotencyKey }
+        if !requestID.isEmpty { header["X-Request-Id"] = requestID }
+        if !bearer.isEmpty { header["Authorization"] = "Bearer \(bearer)" }
+        return try await request(method: "POST", path: "/v1/knowledge/imports", body: payload, headers: header)
+    }
+
+    public func getKnowledgeJob(id: String, requestID: String = "", bearer: String = "") async throws -> APIResponse<KnowledgeJob> {
+        var header: [String: String] = [:]
+        if !requestID.isEmpty { header["X-Request-Id"] = requestID }
+        if !bearer.isEmpty { header["Authorization"] = "Bearer \(bearer)" }
+        return try await request(method: "GET", path: "/v1/knowledge/jobs/\(id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? id)", body: nil, headers: header)
+    }
+
+    public func skipKnowledgeFirstPack(idempotencyKey: String, body: FirstPackSkipRequest? = nil, requestID: String = "", bearer: String = "") async throws -> APIResponse<FirstPackSkipResponse> {
+        let payload: Data? = if let body { try JSONEncoder().encode(body) } else { nil }
+        var header: [String: String] = [:]
+        if !idempotencyKey.isEmpty { header["Idempotency-Key"] = idempotencyKey }
+        if !requestID.isEmpty { header["X-Request-Id"] = requestID }
+        if !bearer.isEmpty { header["Authorization"] = "Bearer \(bearer)" }
+        return try await request(method: "POST", path: "/v1/knowledge/first-pack/skip", body: payload, headers: header)
     }
 
     private func request<T: Decodable>(method: String, path: String, body: Data?, headers: [String: String]) async throws -> APIResponse<T> {

@@ -33,6 +33,20 @@ export class StepIdValues {
   static readonly StepIdDailyTime: string = "daily_time"
 }
 
+export class MaterialSourceValues {
+  static readonly MaterialSourceCamera: string = "camera"
+  static readonly MaterialSourceFile: string = "file"
+  static readonly MaterialSourcePasteNote: string = "paste_note"
+}
+
+export class JobStatusValues {
+  static readonly JobStatusAccepted: string = "accepted"
+  static readonly JobStatusRunning: string = "running"
+  static readonly JobStatusMapReady: string = "map_ready"
+  static readonly JobStatusFailedRetryable: string = "failed_retryable"
+  static readonly JobStatusFailedTerminal: string = "failed_terminal"
+}
+
 export class HealthStatus {
   status: string = ''
 }
@@ -119,6 +133,65 @@ export class OnboardingWriteRequest {
   answer: string = ''
 }
 
+export class KnowledgePackCreateRequest {
+
+}
+
+export class KnowledgePack {
+  pack_id: string = ''
+  account: AccountSummary = new AccountSummary()
+  next_step: string = ''
+}
+
+export class MaterialUploadUrlRequest {
+  pack_id: string = ''
+  source: string = ''
+  content_type: string = ''
+  byte_size: number = 0
+  filename: string = ''
+}
+
+export class MaterialUploadUrlResponse {
+  material_id: string = ''
+  pack_id: string = ''
+  source: string = ''
+  upload_url: string = ''
+  upload_method: string = ''
+  upload_headers: Record<string, string> | null = null
+  expires_in: number = 0
+  account: AccountSummary = new AccountSummary()
+  next_step: string = ''
+}
+
+export class ImportRequest {
+  pack_id: string = ''
+  material_id: string = ''
+}
+
+export class KnowledgeJob {
+  job_id: string = ''
+  pack_id: string = ''
+  material_id: string = ''
+  source: string = ''
+  status: string = ''
+  map_ready: boolean = false
+  retryable: boolean = false
+  progress_message: string = ''
+  failure_code: string | null = null
+  failure_message: string | null = null
+  account: AccountSummary = new AccountSummary()
+  next_step: string = ''
+}
+
+export class FirstPackSkipRequest {
+
+}
+
+export class FirstPackSkipResponse {
+  account: AccountSummary = new AccountSummary()
+  next_step: string = ''
+}
+
 export class ErrorBody {
   error: ErrorBodyError = new ErrorBodyError()
   request_id: string = ''
@@ -190,6 +263,36 @@ export class PutIdentityProfileResult {
   statusCode: number = 0
   requestId: string = ''
   body: IdentityProfile = new IdentityProfile()
+}
+
+export class CreateKnowledgePackResult {
+  statusCode: number = 0
+  requestId: string = ''
+  body: KnowledgePack = new KnowledgePack()
+}
+
+export class CreateKnowledgeMaterialUploadUrlResult {
+  statusCode: number = 0
+  requestId: string = ''
+  body: MaterialUploadUrlResponse = new MaterialUploadUrlResponse()
+}
+
+export class CreateKnowledgeImportResult {
+  statusCode: number = 0
+  requestId: string = ''
+  body: KnowledgeJob = new KnowledgeJob()
+}
+
+export class GetKnowledgeJobResult {
+  statusCode: number = 0
+  requestId: string = ''
+  body: KnowledgeJob = new KnowledgeJob()
+}
+
+export class SkipKnowledgeFirstPackResult {
+  statusCode: number = 0
+  requestId: string = ''
+  body: FirstPackSkipResponse = new FirstPackSkipResponse()
 }
 
 export function getHealth(baseUrl: string): Promise<GetHealthResult> {
@@ -432,6 +535,140 @@ export function putIdentityProfile(baseUrl: string, body: IdentityProfileUpdate,
   })
 }
 
+export function createKnowledgePack(baseUrl: string, body: KnowledgePackCreateRequest | null, requestId?: string, bearer?: string): Promise<CreateKnowledgePackResult> {
+  const extra = new RequestExtra()
+  if (body !== undefined && body !== null) {
+    extra.body = writeKnowledgePackCreateRequest(body)
+  }
+  if (requestId !== undefined && requestId !== null) {
+    extra.requestId = requestId
+  }
+  if (bearer !== undefined && bearer !== null) {
+    extra.bearer = bearer
+  }
+  return request(joinURL(baseUrl, '/v1/knowledge/packs'), http.RequestMethod.POST, extra).then((response: http.HttpResponse) => {
+    const result = new CreateKnowledgePackResult()
+    result.statusCode = response.responseCode
+    const header = response.header['X-Request-Id']
+    if (header !== undefined && header !== null) {
+      result.requestId = String(header)
+    }
+    if (response.responseCode === 204) {
+      return result
+    }
+    const parsed = JSON.parse(response.result.toString()) as Record<string, Object>
+    result.body = readKnowledgePack(parsed)
+    return result
+  })
+}
+
+export function createKnowledgeMaterialUploadUrl(baseUrl: string, body: MaterialUploadUrlRequest, requestId?: string, bearer?: string): Promise<CreateKnowledgeMaterialUploadUrlResult> {
+  const extra = new RequestExtra()
+  if (body !== undefined && body !== null) {
+    extra.body = writeMaterialUploadUrlRequest(body)
+  }
+  if (requestId !== undefined && requestId !== null) {
+    extra.requestId = requestId
+  }
+  if (bearer !== undefined && bearer !== null) {
+    extra.bearer = bearer
+  }
+  return request(joinURL(baseUrl, '/v1/knowledge/materials/upload-url'), http.RequestMethod.POST, extra).then((response: http.HttpResponse) => {
+    const result = new CreateKnowledgeMaterialUploadUrlResult()
+    result.statusCode = response.responseCode
+    const header = response.header['X-Request-Id']
+    if (header !== undefined && header !== null) {
+      result.requestId = String(header)
+    }
+    if (response.responseCode === 204) {
+      return result
+    }
+    const parsed = JSON.parse(response.result.toString()) as Record<string, Object>
+    result.body = readMaterialUploadUrlResponse(parsed)
+    return result
+  })
+}
+
+export function createKnowledgeImport(baseUrl: string, idempotencyKey: string, body: ImportRequest, requestId?: string, bearer?: string): Promise<CreateKnowledgeImportResult> {
+  const extra = new RequestExtra()
+  if (body !== undefined && body !== null) {
+    extra.body = writeImportRequest(body)
+  }
+  extra.idempotencyKey = idempotencyKey
+  if (requestId !== undefined && requestId !== null) {
+    extra.requestId = requestId
+  }
+  if (bearer !== undefined && bearer !== null) {
+    extra.bearer = bearer
+  }
+  return request(joinURL(baseUrl, '/v1/knowledge/imports'), http.RequestMethod.POST, extra).then((response: http.HttpResponse) => {
+    const result = new CreateKnowledgeImportResult()
+    result.statusCode = response.responseCode
+    const header = response.header['X-Request-Id']
+    if (header !== undefined && header !== null) {
+      result.requestId = String(header)
+    }
+    if (response.responseCode === 204) {
+      return result
+    }
+    const parsed = JSON.parse(response.result.toString()) as Record<string, Object>
+    result.body = readKnowledgeJob(parsed)
+    return result
+  })
+}
+
+export function getKnowledgeJob(baseUrl: string, id: string, requestId?: string, bearer?: string): Promise<GetKnowledgeJobResult> {
+  const extra = new RequestExtra()
+  if (requestId !== undefined && requestId !== null) {
+    extra.requestId = requestId
+  }
+  if (bearer !== undefined && bearer !== null) {
+    extra.bearer = bearer
+  }
+  return request(joinURL(baseUrl, `/v1/knowledge/jobs/${encodeURIComponent(id)}`), http.RequestMethod.GET, extra).then((response: http.HttpResponse) => {
+    const result = new GetKnowledgeJobResult()
+    result.statusCode = response.responseCode
+    const header = response.header['X-Request-Id']
+    if (header !== undefined && header !== null) {
+      result.requestId = String(header)
+    }
+    if (response.responseCode === 204) {
+      return result
+    }
+    const parsed = JSON.parse(response.result.toString()) as Record<string, Object>
+    result.body = readKnowledgeJob(parsed)
+    return result
+  })
+}
+
+export function skipKnowledgeFirstPack(baseUrl: string, idempotencyKey: string, body: FirstPackSkipRequest | null, requestId?: string, bearer?: string): Promise<SkipKnowledgeFirstPackResult> {
+  const extra = new RequestExtra()
+  if (body !== undefined && body !== null) {
+    extra.body = writeFirstPackSkipRequest(body)
+  }
+  extra.idempotencyKey = idempotencyKey
+  if (requestId !== undefined && requestId !== null) {
+    extra.requestId = requestId
+  }
+  if (bearer !== undefined && bearer !== null) {
+    extra.bearer = bearer
+  }
+  return request(joinURL(baseUrl, '/v1/knowledge/first-pack/skip'), http.RequestMethod.POST, extra).then((response: http.HttpResponse) => {
+    const result = new SkipKnowledgeFirstPackResult()
+    result.statusCode = response.responseCode
+    const header = response.header['X-Request-Id']
+    if (header !== undefined && header !== null) {
+      result.requestId = String(header)
+    }
+    if (response.responseCode === 204) {
+      return result
+    }
+    const parsed = JSON.parse(response.result.toString()) as Record<string, Object>
+    result.body = readFirstPackSkipResponse(parsed)
+    return result
+  })
+}
+
 function writeOtpSendRequest(body: OtpSendRequest): string {
   return JSON.stringify(body)
 }
@@ -453,6 +690,22 @@ function writeOnboardingWriteRequest(body: OnboardingWriteRequest): string {
 }
 
 function writeIdentityProfileUpdate(body: IdentityProfileUpdate): string {
+  return JSON.stringify(body)
+}
+
+function writeKnowledgePackCreateRequest(body: KnowledgePackCreateRequest): string {
+  return JSON.stringify(body)
+}
+
+function writeMaterialUploadUrlRequest(body: MaterialUploadUrlRequest): string {
+  return JSON.stringify(body)
+}
+
+function writeImportRequest(body: ImportRequest): string {
+  return JSON.stringify(body)
+}
+
+function writeFirstPackSkipRequest(body: FirstPackSkipRequest): string {
   return JSON.stringify(body)
 }
 
@@ -827,6 +1080,233 @@ function readOnboardingWriteRequest(parsed: Record<string, Object>): OnboardingW
     body.answer = ''
   } else if (answerValue !== undefined) {
     body.answer = answerValue as string
+  }
+  return body
+}
+
+function readKnowledgePackCreateRequest(parsed: Record<string, Object>): KnowledgePackCreateRequest {
+  const body = new KnowledgePackCreateRequest()
+
+  return body
+}
+
+function readKnowledgePack(parsed: Record<string, Object>): KnowledgePack {
+  const body = new KnowledgePack()
+  const pack_idValue = parsed['pack_id']
+  if (pack_idValue === null) {
+    body.pack_id = ''
+  } else if (pack_idValue !== undefined) {
+    body.pack_id = pack_idValue as string
+  }
+  const accountValue = parsed['account']
+  if (accountValue !== undefined && accountValue !== null) {
+    body.account = readAccountSummary(accountValue as Record<string, Object>)
+  }
+  const next_stepValue = parsed['next_step']
+  if (next_stepValue === null) {
+    body.next_step = ''
+  } else if (next_stepValue !== undefined) {
+    body.next_step = next_stepValue as string
+  }
+  return body
+}
+
+function readMaterialUploadUrlRequest(parsed: Record<string, Object>): MaterialUploadUrlRequest {
+  const body = new MaterialUploadUrlRequest()
+  const pack_idValue = parsed['pack_id']
+  if (pack_idValue === null) {
+    body.pack_id = ''
+  } else if (pack_idValue !== undefined) {
+    body.pack_id = pack_idValue as string
+  }
+  const sourceValue = parsed['source']
+  if (sourceValue === null) {
+    body.source = ''
+  } else if (sourceValue !== undefined) {
+    body.source = sourceValue as string
+  }
+  const content_typeValue = parsed['content_type']
+  if (content_typeValue === null) {
+    body.content_type = ''
+  } else if (content_typeValue !== undefined) {
+    body.content_type = content_typeValue as string
+  }
+  const byte_sizeValue = parsed['byte_size']
+  if (byte_sizeValue === null) {
+    body.byte_size = 0
+  } else if (byte_sizeValue !== undefined) {
+    body.byte_size = byte_sizeValue as number
+  }
+  const filenameValue = parsed['filename']
+  if (filenameValue === null) {
+    body.filename = ''
+  } else if (filenameValue !== undefined) {
+    body.filename = filenameValue as string
+  }
+  return body
+}
+
+function readMaterialUploadUrlResponse(parsed: Record<string, Object>): MaterialUploadUrlResponse {
+  const body = new MaterialUploadUrlResponse()
+  const material_idValue = parsed['material_id']
+  if (material_idValue === null) {
+    body.material_id = ''
+  } else if (material_idValue !== undefined) {
+    body.material_id = material_idValue as string
+  }
+  const pack_idValue = parsed['pack_id']
+  if (pack_idValue === null) {
+    body.pack_id = ''
+  } else if (pack_idValue !== undefined) {
+    body.pack_id = pack_idValue as string
+  }
+  const sourceValue = parsed['source']
+  if (sourceValue === null) {
+    body.source = ''
+  } else if (sourceValue !== undefined) {
+    body.source = sourceValue as string
+  }
+  const upload_urlValue = parsed['upload_url']
+  if (upload_urlValue === null) {
+    body.upload_url = ''
+  } else if (upload_urlValue !== undefined) {
+    body.upload_url = upload_urlValue as string
+  }
+  const upload_methodValue = parsed['upload_method']
+  if (upload_methodValue === null) {
+    body.upload_method = ''
+  } else if (upload_methodValue !== undefined) {
+    body.upload_method = upload_methodValue as string
+  }
+  body.upload_headers = readStringMap(parsed['upload_headers'])
+  const expires_inValue = parsed['expires_in']
+  if (expires_inValue === null) {
+    body.expires_in = 0
+  } else if (expires_inValue !== undefined) {
+    body.expires_in = expires_inValue as number
+  }
+  const accountValue = parsed['account']
+  if (accountValue !== undefined && accountValue !== null) {
+    body.account = readAccountSummary(accountValue as Record<string, Object>)
+  }
+  const next_stepValue = parsed['next_step']
+  if (next_stepValue === null) {
+    body.next_step = ''
+  } else if (next_stepValue !== undefined) {
+    body.next_step = next_stepValue as string
+  }
+  return body
+}
+
+function readImportRequest(parsed: Record<string, Object>): ImportRequest {
+  const body = new ImportRequest()
+  const pack_idValue = parsed['pack_id']
+  if (pack_idValue === null) {
+    body.pack_id = ''
+  } else if (pack_idValue !== undefined) {
+    body.pack_id = pack_idValue as string
+  }
+  const material_idValue = parsed['material_id']
+  if (material_idValue === null) {
+    body.material_id = ''
+  } else if (material_idValue !== undefined) {
+    body.material_id = material_idValue as string
+  }
+  return body
+}
+
+function readKnowledgeJob(parsed: Record<string, Object>): KnowledgeJob {
+  const body = new KnowledgeJob()
+  const job_idValue = parsed['job_id']
+  if (job_idValue === null) {
+    body.job_id = ''
+  } else if (job_idValue !== undefined) {
+    body.job_id = job_idValue as string
+  }
+  const pack_idValue = parsed['pack_id']
+  if (pack_idValue === null) {
+    body.pack_id = ''
+  } else if (pack_idValue !== undefined) {
+    body.pack_id = pack_idValue as string
+  }
+  const material_idValue = parsed['material_id']
+  if (material_idValue === null) {
+    body.material_id = ''
+  } else if (material_idValue !== undefined) {
+    body.material_id = material_idValue as string
+  }
+  const sourceValue = parsed['source']
+  if (sourceValue === null) {
+    body.source = ''
+  } else if (sourceValue !== undefined) {
+    body.source = sourceValue as string
+  }
+  const statusValue = parsed['status']
+  if (statusValue === null) {
+    body.status = ''
+  } else if (statusValue !== undefined) {
+    body.status = statusValue as string
+  }
+  const map_readyValue = parsed['map_ready']
+  if (map_readyValue === null) {
+    body.map_ready = false
+  } else if (map_readyValue !== undefined) {
+    body.map_ready = map_readyValue as boolean
+  }
+  const retryableValue = parsed['retryable']
+  if (retryableValue === null) {
+    body.retryable = false
+  } else if (retryableValue !== undefined) {
+    body.retryable = retryableValue as boolean
+  }
+  const progress_messageValue = parsed['progress_message']
+  if (progress_messageValue === null) {
+    body.progress_message = ''
+  } else if (progress_messageValue !== undefined) {
+    body.progress_message = progress_messageValue as string
+  }
+  const failure_codeValue = parsed['failure_code']
+  if (failure_codeValue === null) {
+    body.failure_code = null
+  } else if (failure_codeValue !== undefined) {
+    body.failure_code = failure_codeValue as string
+  }
+  const failure_messageValue = parsed['failure_message']
+  if (failure_messageValue === null) {
+    body.failure_message = null
+  } else if (failure_messageValue !== undefined) {
+    body.failure_message = failure_messageValue as string
+  }
+  const accountValue = parsed['account']
+  if (accountValue !== undefined && accountValue !== null) {
+    body.account = readAccountSummary(accountValue as Record<string, Object>)
+  }
+  const next_stepValue = parsed['next_step']
+  if (next_stepValue === null) {
+    body.next_step = ''
+  } else if (next_stepValue !== undefined) {
+    body.next_step = next_stepValue as string
+  }
+  return body
+}
+
+function readFirstPackSkipRequest(parsed: Record<string, Object>): FirstPackSkipRequest {
+  const body = new FirstPackSkipRequest()
+
+  return body
+}
+
+function readFirstPackSkipResponse(parsed: Record<string, Object>): FirstPackSkipResponse {
+  const body = new FirstPackSkipResponse()
+  const accountValue = parsed['account']
+  if (accountValue !== undefined && accountValue !== null) {
+    body.account = readAccountSummary(accountValue as Record<string, Object>)
+  }
+  const next_stepValue = parsed['next_step']
+  if (next_stepValue === null) {
+    body.next_step = ''
+  } else if (next_stepValue !== undefined) {
+    body.next_step = next_stepValue as string
   }
   return body
 }
