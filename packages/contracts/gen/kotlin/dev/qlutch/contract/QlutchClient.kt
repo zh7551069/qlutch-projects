@@ -4,18 +4,69 @@ package dev.qlutch.contract
 
 import java.net.HttpURLConnection
 import java.net.URI
+import org.json.JSONArray
 import org.json.JSONObject
 
 class ApiResponse<T>(val statusCode: Int, val body: T, val requestId: String)
 
 private class RawResponse(val statusCode: Int, val text: String, val requestId: String)
 
+typealias RegionCode = String
+
+object RegionCodeValues {
+    const val RegionCodeValue86: String = "+86"
+    const val RegionCodeValue852: String = "+852"
+}
+
+typealias Locale = String
+
+object LocaleValues {
+    const val LocaleZhHans: String = "zh-Hans"
+    const val LocaleZhHant: String = "zh-Hant"
+}
+
+typealias OtpPurpose = String
+
+object OtpPurposeValues {
+    const val OtpPurposeRegister: String = "register"
+    const val OtpPurposeLogin: String = "login"
+}
+
+typealias NextStep = String
+
+object NextStepValues {
+    const val NextStepNEEDONBOARDING: String = "NEED_ONBOARDING"
+    const val NextStepNEEDFIRSTPACK: String = "NEED_FIRST_PACK"
+    const val NextStepREADYHOME: String = "READY_HOME"
+}
+
+typealias StepId = String
+
+object StepIdValues {
+    const val StepIdNickname: String = "nickname"
+    const val StepIdAge: String = "age"
+    const val StepIdStudyOrWork: String = "study_or_work"
+    const val StepIdIdentity: String = "identity"
+    const val StepIdHowToAddress: String = "how_to_address"
+    const val StepIdExamTrack: String = "exam_track"
+    const val StepIdDailyTime: String = "daily_time"
+}
+
 class HealthStatus(
     val status: String
-)
+) {
+    fun toJSON(): JSONObject {
+        val out = JSONObject()
+        out.put("status", status)
+        return out
+    }
+}
 
 fun parseHealthStatus(text: String): HealthStatus {
-    val root = JSONObject(text)
+    return parseHealthStatusObject(JSONObject(text))
+}
+
+fun parseHealthStatusObject(root: JSONObject): HealthStatus {
     return HealthStatus(
         root.getString("status")
     )
@@ -24,34 +75,506 @@ fun parseHealthStatus(text: String): HealthStatus {
 class ReadyStatus(
     val status: String,
     val checks: Map<String, String>?
-)
+) {
+    fun toJSON(): JSONObject {
+        val out = JSONObject()
+        out.put("status", status)
+    if (checks != null) out.put("checks", checks)
+        return out
+    }
+}
 
 fun parseReadyStatus(text: String): ReadyStatus {
-    val root = JSONObject(text)
+    return parseReadyStatusObject(JSONObject(text))
+}
+
+fun parseReadyStatusObject(root: JSONObject): ReadyStatus {
     return ReadyStatus(
         root.getString("status"),
-        readStringMap(root, "checks")
+        if (root.has("checks") && !root.isNull("checks")) readStringMap(root, "checks") else null
     )
 }
 
+class OtpSendRequest(
+    val region_code: String,
+    val phone_national: String,
+    val purpose: String,
+    val locale: String?
+) {
+    fun toJSON(): JSONObject {
+        val out = JSONObject()
+        out.put("region_code", region_code)
+    out.put("phone_national", phone_national)
+    out.put("purpose", purpose)
+    if (locale != null) out.put("locale", locale)
+        return out
+    }
+}
+
+fun parseOtpSendRequest(text: String): OtpSendRequest {
+    return parseOtpSendRequestObject(JSONObject(text))
+}
+
+fun parseOtpSendRequestObject(root: JSONObject): OtpSendRequest {
+    return OtpSendRequest(
+        root.getString("region_code"),
+        root.getString("phone_national"),
+        root.getString("purpose"),
+        if (root.has("locale") && !root.isNull("locale")) root.getString("locale") else null
+    )
+}
+
+class OtpSendResponse(
+    val retry_after_seconds: Long,
+    val destination_hint: String?
+) {
+    fun toJSON(): JSONObject {
+        val out = JSONObject()
+        out.put("retry_after_seconds", retry_after_seconds)
+    if (destination_hint != null) out.put("destination_hint", destination_hint)
+        return out
+    }
+}
+
+fun parseOtpSendResponse(text: String): OtpSendResponse {
+    return parseOtpSendResponseObject(JSONObject(text))
+}
+
+fun parseOtpSendResponseObject(root: JSONObject): OtpSendResponse {
+    return OtpSendResponse(
+        root.getLong("retry_after_seconds"),
+        if (root.has("destination_hint") && !root.isNull("destination_hint")) root.getString("destination_hint") else null
+    )
+}
+
+class OtpVerifyRequest(
+    val region_code: String,
+    val phone_national: String,
+    val purpose: String,
+    val code: String,
+    val locale: String?
+) {
+    fun toJSON(): JSONObject {
+        val out = JSONObject()
+        out.put("region_code", region_code)
+    out.put("phone_national", phone_national)
+    out.put("purpose", purpose)
+    out.put("code", code)
+    if (locale != null) out.put("locale", locale)
+        return out
+    }
+}
+
+fun parseOtpVerifyRequest(text: String): OtpVerifyRequest {
+    return parseOtpVerifyRequestObject(JSONObject(text))
+}
+
+fun parseOtpVerifyRequestObject(root: JSONObject): OtpVerifyRequest {
+    return OtpVerifyRequest(
+        root.getString("region_code"),
+        root.getString("phone_national"),
+        root.getString("purpose"),
+        root.getString("code"),
+        if (root.has("locale") && !root.isNull("locale")) root.getString("locale") else null
+    )
+}
+
+class SessionRefreshRequest(
+    val refresh_token: String
+) {
+    fun toJSON(): JSONObject {
+        val out = JSONObject()
+        out.put("refresh_token", refresh_token)
+        return out
+    }
+}
+
+fun parseSessionRefreshRequest(text: String): SessionRefreshRequest {
+    return parseSessionRefreshRequestObject(JSONObject(text))
+}
+
+fun parseSessionRefreshRequestObject(root: JSONObject): SessionRefreshRequest {
+    return SessionRefreshRequest(
+        root.getString("refresh_token")
+    )
+}
+
+class SessionRevokeRequest(
+    val refresh_token: String?
+) {
+    fun toJSON(): JSONObject {
+        val out = JSONObject()
+        if (refresh_token != null) out.put("refresh_token", refresh_token)
+        return out
+    }
+}
+
+fun parseSessionRevokeRequest(text: String): SessionRevokeRequest {
+    return parseSessionRevokeRequestObject(JSONObject(text))
+}
+
+fun parseSessionRevokeRequestObject(root: JSONObject): SessionRevokeRequest {
+    return SessionRevokeRequest(
+        if (root.has("refresh_token") && !root.isNull("refresh_token")) root.getString("refresh_token") else null
+    )
+}
+
+class AccountSummary(
+    val user_id: String,
+    val is_new_user: Boolean,
+    val onboarding_completed: Boolean,
+    val has_first_pack: Boolean
+) {
+    fun toJSON(): JSONObject {
+        val out = JSONObject()
+        out.put("user_id", user_id)
+    out.put("is_new_user", is_new_user)
+    out.put("onboarding_completed", onboarding_completed)
+    out.put("has_first_pack", has_first_pack)
+        return out
+    }
+}
+
+fun parseAccountSummary(text: String): AccountSummary {
+    return parseAccountSummaryObject(JSONObject(text))
+}
+
+fun parseAccountSummaryObject(root: JSONObject): AccountSummary {
+    return AccountSummary(
+        root.getString("user_id"),
+        root.getBoolean("is_new_user"),
+        root.getBoolean("onboarding_completed"),
+        root.getBoolean("has_first_pack")
+    )
+}
+
+class IdentityProfile(
+    val locale: String,
+    val region_code: String
+) {
+    fun toJSON(): JSONObject {
+        val out = JSONObject()
+        out.put("locale", locale)
+    out.put("region_code", region_code)
+        return out
+    }
+}
+
+fun parseIdentityProfile(text: String): IdentityProfile {
+    return parseIdentityProfileObject(JSONObject(text))
+}
+
+fun parseIdentityProfileObject(root: JSONObject): IdentityProfile {
+    return IdentityProfile(
+        root.getString("locale"),
+        root.getString("region_code")
+    )
+}
+
+class IdentityProfileUpdate(
+    val locale: String?,
+    val region_code: String?
+) {
+    fun toJSON(): JSONObject {
+        val out = JSONObject()
+        if (locale != null) out.put("locale", locale)
+    if (region_code != null) out.put("region_code", region_code)
+        return out
+    }
+}
+
+fun parseIdentityProfileUpdate(text: String): IdentityProfileUpdate {
+    return parseIdentityProfileUpdateObject(JSONObject(text))
+}
+
+fun parseIdentityProfileUpdateObject(root: JSONObject): IdentityProfileUpdate {
+    return IdentityProfileUpdate(
+        if (root.has("locale") && !root.isNull("locale")) root.getString("locale") else null,
+        if (root.has("region_code") && !root.isNull("region_code")) root.getString("region_code") else null
+    )
+}
+
+class SessionResponse(
+    val access_token: String,
+    val refresh_token: String,
+    val expires_in: Long,
+    val account: AccountSummary,
+    val next_step: String,
+    val profile: IdentityProfile
+) {
+    fun toJSON(): JSONObject {
+        val out = JSONObject()
+        out.put("access_token", access_token)
+    out.put("refresh_token", refresh_token)
+    out.put("expires_in", expires_in)
+    out.put("account", account.toJSON())
+    out.put("next_step", next_step)
+    out.put("profile", profile.toJSON())
+        return out
+    }
+}
+
+fun parseSessionResponse(text: String): SessionResponse {
+    return parseSessionResponseObject(JSONObject(text))
+}
+
+fun parseSessionResponseObject(root: JSONObject): SessionResponse {
+    return SessionResponse(
+        root.getString("access_token"),
+        root.getString("refresh_token"),
+        root.getLong("expires_in"),
+        parseAccountSummaryObject(root.getJSONObject("account")),
+        root.getString("next_step"),
+        parseIdentityProfileObject(root.getJSONObject("profile"))
+    )
+}
+
+class OnboardingStepState(
+    val step_id: String,
+    val index: Long,
+    val status: String,
+    val answer: String?
+) {
+    fun toJSON(): JSONObject {
+        val out = JSONObject()
+        out.put("step_id", step_id)
+    out.put("index", index)
+    out.put("status", status)
+    if (answer != null) out.put("answer", answer)
+        return out
+    }
+}
+
+fun parseOnboardingStepState(text: String): OnboardingStepState {
+    return parseOnboardingStepStateObject(JSONObject(text))
+}
+
+fun parseOnboardingStepStateObject(root: JSONObject): OnboardingStepState {
+    return OnboardingStepState(
+        root.getString("step_id"),
+        root.getLong("index"),
+        root.getString("status"),
+        if (root.has("answer") && !root.isNull("answer")) root.getString("answer") else null
+    )
+}
+
+class OnboardingState(
+    val current_step_id: String?,
+    val current_index: Long,
+    val completed: Boolean,
+    val nickname: String?,
+    val steps: List<OnboardingStepState>,
+    val account: AccountSummary,
+    val next_step: String
+) {
+    fun toJSON(): JSONObject {
+        val out = JSONObject()
+        if (current_step_id != null) out.put("current_step_id", current_step_id)
+    out.put("current_index", current_index)
+    out.put("completed", completed)
+    if (nickname != null) out.put("nickname", nickname)
+    out.put("steps", steps)
+    out.put("account", account.toJSON())
+    out.put("next_step", next_step)
+        return out
+    }
+}
+
+fun parseOnboardingState(text: String): OnboardingState {
+    return parseOnboardingStateObject(JSONObject(text))
+}
+
+fun parseOnboardingStateObject(root: JSONObject): OnboardingState {
+    return OnboardingState(
+        if (root.has("current_step_id") && !root.isNull("current_step_id")) root.getString("current_step_id") else null,
+        root.getLong("current_index"),
+        root.getBoolean("completed"),
+        if (root.has("nickname") && !root.isNull("nickname")) root.getString("nickname") else null,
+        readOnboardingStepStateArray(root, "steps"),
+        parseAccountSummaryObject(root.getJSONObject("account")),
+        root.getString("next_step")
+    )
+}
+
+class OnboardingWriteRequest(
+    val step_id: String,
+    val nickname: String?,
+    val answer: String?
+) {
+    fun toJSON(): JSONObject {
+        val out = JSONObject()
+        out.put("step_id", step_id)
+    if (nickname != null) out.put("nickname", nickname)
+    if (answer != null) out.put("answer", answer)
+        return out
+    }
+}
+
+fun parseOnboardingWriteRequest(text: String): OnboardingWriteRequest {
+    return parseOnboardingWriteRequestObject(JSONObject(text))
+}
+
+fun parseOnboardingWriteRequestObject(root: JSONObject): OnboardingWriteRequest {
+    return OnboardingWriteRequest(
+        root.getString("step_id"),
+        if (root.has("nickname") && !root.isNull("nickname")) root.getString("nickname") else null,
+        if (root.has("answer") && !root.isNull("answer")) root.getString("answer") else null
+    )
+}
+
+class ErrorBody(
+    val error: ErrorBodyError,
+    val request_id: String
+) {
+    fun toJSON(): JSONObject {
+        val out = JSONObject()
+        out.put("error", error.toJSON())
+    out.put("request_id", request_id)
+        return out
+    }
+}
+
+fun parseErrorBody(text: String): ErrorBody {
+    return parseErrorBodyObject(JSONObject(text))
+}
+
+fun parseErrorBodyObject(root: JSONObject): ErrorBody {
+    return ErrorBody(
+        parseErrorBodyErrorObject(root.getJSONObject("error")),
+        root.getString("request_id")
+    )
+}
+
+class ErrorBodyError(
+    val code: String,
+    val message: String,
+    val details: String?
+) {
+    fun toJSON(): JSONObject {
+        val out = JSONObject()
+        out.put("code", code)
+    out.put("message", message)
+    if (details != null) out.put("details", details)
+        return out
+    }
+}
+
+fun parseErrorBodyError(text: String): ErrorBodyError {
+    return parseErrorBodyErrorObject(JSONObject(text))
+}
+
+fun parseErrorBodyErrorObject(root: JSONObject): ErrorBodyError {
+    return ErrorBodyError(
+        root.getString("code"),
+        root.getString("message"),
+        if (root.has("details") && !root.isNull("details")) root.get("details").toString() else null
+    )
+}
+
+class Empty
+
 class QlutchClient(private val baseUrl: String) {
     fun getHealth(): ApiResponse<HealthStatus> {
-        val raw = request("GET", "/healthz")
-        return ApiResponse(raw.statusCode, parseHealthStatus(raw.text), raw.requestId)
+        val headers = linkedMapOf<String, String>()
+        
+        val raw = request("GET", "/healthz", null, headers)
+        val parsed = parseHealthStatus(raw.text)
+        return ApiResponse(raw.statusCode, parsed, raw.requestId)
     }
 
     fun getReady(): ApiResponse<ReadyStatus> {
-        val raw = request("GET", "/readyz")
-        return ApiResponse(raw.statusCode, parseReadyStatus(raw.text), raw.requestId)
+        val headers = linkedMapOf<String, String>()
+        
+        val raw = request("GET", "/readyz", null, headers)
+        val parsed = parseReadyStatus(raw.text)
+        return ApiResponse(raw.statusCode, parsed, raw.requestId)
     }
 
-    private fun request(method: String, path: String): RawResponse {
+    fun sendIdentityOtp(idempotencyKey: String, body: OtpSendRequest, requestId: String = ""): ApiResponse<OtpSendResponse> {
+        val headers = linkedMapOf<String, String>()
+        headers["Idempotency-Key"] = idempotencyKey
+        if (requestId.isNotEmpty()) headers["X-Request-Id"] = requestId
+        val raw = request("POST", "/v1/identity/otp/send", body.toJSON().toString(), headers)
+        val parsed = parseOtpSendResponse(raw.text)
+        return ApiResponse(raw.statusCode, parsed, raw.requestId)
+    }
+
+    fun verifyIdentityOtp(body: OtpVerifyRequest, requestId: String = ""): ApiResponse<SessionResponse> {
+        val headers = linkedMapOf<String, String>()
+        if (requestId.isNotEmpty()) headers["X-Request-Id"] = requestId
+        val raw = request("POST", "/v1/identity/otp/verify", body.toJSON().toString(), headers)
+        val parsed = parseSessionResponse(raw.text)
+        return ApiResponse(raw.statusCode, parsed, raw.requestId)
+    }
+
+    fun refreshIdentitySession(body: SessionRefreshRequest, requestId: String = ""): ApiResponse<SessionResponse> {
+        val headers = linkedMapOf<String, String>()
+        if (requestId.isNotEmpty()) headers["X-Request-Id"] = requestId
+        val raw = request("POST", "/v1/identity/session/refresh", body.toJSON().toString(), headers)
+        val parsed = parseSessionResponse(raw.text)
+        return ApiResponse(raw.statusCode, parsed, raw.requestId)
+    }
+
+    fun revokeIdentitySession(body: SessionRevokeRequest? = null, requestId: String = "", bearer: String = ""): ApiResponse<Empty> {
+        val headers = linkedMapOf<String, String>()
+        if (requestId.isNotEmpty()) headers["X-Request-Id"] = requestId
+        if (bearer.isNotEmpty()) headers["Authorization"] = "Bearer $bearer"
+        val raw = request("POST", "/v1/identity/session/revoke", body?.toJSON()?.toString(), headers)
+        val parsed = Empty()
+        return ApiResponse(raw.statusCode, parsed, raw.requestId)
+    }
+
+    fun getIdentityOnboarding(requestId: String = "", bearer: String = ""): ApiResponse<OnboardingState> {
+        val headers = linkedMapOf<String, String>()
+        if (requestId.isNotEmpty()) headers["X-Request-Id"] = requestId
+        if (bearer.isNotEmpty()) headers["Authorization"] = "Bearer $bearer"
+        val raw = request("GET", "/v1/identity/onboarding", null, headers)
+        val parsed = parseOnboardingState(raw.text)
+        return ApiResponse(raw.statusCode, parsed, raw.requestId)
+    }
+
+    fun putIdentityOnboarding(body: OnboardingWriteRequest, requestId: String = "", bearer: String = ""): ApiResponse<OnboardingState> {
+        val headers = linkedMapOf<String, String>()
+        if (requestId.isNotEmpty()) headers["X-Request-Id"] = requestId
+        if (bearer.isNotEmpty()) headers["Authorization"] = "Bearer $bearer"
+        val raw = request("PUT", "/v1/identity/onboarding", body.toJSON().toString(), headers)
+        val parsed = parseOnboardingState(raw.text)
+        return ApiResponse(raw.statusCode, parsed, raw.requestId)
+    }
+
+    fun getIdentityProfile(requestId: String = "", bearer: String = ""): ApiResponse<IdentityProfile> {
+        val headers = linkedMapOf<String, String>()
+        if (requestId.isNotEmpty()) headers["X-Request-Id"] = requestId
+        if (bearer.isNotEmpty()) headers["Authorization"] = "Bearer $bearer"
+        val raw = request("GET", "/v1/identity/profile", null, headers)
+        val parsed = parseIdentityProfile(raw.text)
+        return ApiResponse(raw.statusCode, parsed, raw.requestId)
+    }
+
+    fun putIdentityProfile(body: IdentityProfileUpdate, requestId: String = "", bearer: String = ""): ApiResponse<IdentityProfile> {
+        val headers = linkedMapOf<String, String>()
+        if (requestId.isNotEmpty()) headers["X-Request-Id"] = requestId
+        if (bearer.isNotEmpty()) headers["Authorization"] = "Bearer $bearer"
+        val raw = request("PUT", "/v1/identity/profile", body.toJSON().toString(), headers)
+        val parsed = parseIdentityProfile(raw.text)
+        return ApiResponse(raw.statusCode, parsed, raw.requestId)
+    }
+
+    private fun request(method: String, path: String, body: String? = null, headers: Map<String, String> = emptyMap()): RawResponse {
         val connection = (URI(baseUrl.trimEnd('/') + path).toURL().openConnection() as HttpURLConnection)
         try {
             connection.requestMethod = method
             connection.setRequestProperty("Accept", "application/json")
+            for ((name, value) in headers) {
+                if (value.isNotEmpty()) connection.setRequestProperty(name, value)
+            }
             connection.connectTimeout = 5000
             connection.readTimeout = 5000
+            if (body != null) {
+                connection.doOutput = true
+                connection.setRequestProperty("Content-Type", "application/json")
+                connection.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
+            }
             val code = connection.responseCode
             val stream = if (code >= 400) connection.errorStream else connection.inputStream
             val text = stream?.bufferedReader()?.use { it.readText() } ?: ""
@@ -61,6 +584,16 @@ class QlutchClient(private val baseUrl: String) {
             connection.disconnect()
         }
     }
+}
+
+private fun readOnboardingStepStateArray(root: JSONObject, name: String): List<OnboardingStepState> {
+    if (!root.has(name) || root.isNull(name)) return emptyList()
+    val arr = root.getJSONArray(name)
+    val out = ArrayList<OnboardingStepState>()
+    for (i in 0 until arr.length()) {
+        out.add(parseOnboardingStepStateObject(arr.getJSONObject(i)))
+    }
+    return out
 }
 
 private fun readStringMap(root: JSONObject, name: String): Map<String, String>? {

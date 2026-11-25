@@ -9,33 +9,44 @@ import (
 	qlutchapi "github.com/zh7551069/qlutch-projects/packages/contracts/gen/go"
 
 	"github.com/zh7551069/qlutch-projects/services/api/internal/auth"
+	"github.com/zh7551069/qlutch-projects/services/api/internal/identity"
 	"github.com/zh7551069/qlutch-projects/services/api/internal/middleware"
 	"github.com/zh7551069/qlutch-projects/services/api/internal/ready"
 )
 
-// Server is the probe HTTP surface. Auth middlewares for both identity domains
-// are constructed here and are not mounted: no login route exists yet.
+// Server is the public HTTP surface. Learner identity routes are mounted.
+// The internal-domain middleware stays unmounted until that contract exists.
 type Server struct {
 	checks   []ready.Pinger
+	ident    *identity.Service
 	learner  http.Handler
 	internal http.Handler
 }
 
-// New builds the public handler and the two unmounted auth placeholders.
-func New(checks []ready.Pinger) *Server {
+// New builds the public handler. A nil identity service gets an in-memory OTP service.
+func New(checks []ready.Pinger, sessions *identity.Service) *Server {
+	if sessions == nil {
+		var err error
+		sessions, err = identity.New(identity.Options{})
+		if err != nil {
+			panic(err)
+		}
+	}
 	next := http.HandlerFunc(func(http.ResponseWriter, *http.Request) {})
 	return &Server{
 		checks:   checks,
+		ident:    sessions,
 		learner:  auth.Require(auth.DomainLearner, auth.Unconfigured{}, next),
 		internal: auth.Require(auth.DomainInternal, auth.Unconfigured{}, next),
 	}
 }
 
-// Handler is the public probe router.
+// Handler is the public router.
 func (s *Server) Handler(origins []string) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", s.healthz)
 	mux.HandleFunc("GET /readyz", s.readyz)
+	identity.Mount(mux, s.ident)
 	return middleware.RequestID(middleware.Tracing(middleware.CORS(origins, mux)))
 }
 

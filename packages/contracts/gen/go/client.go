@@ -3,6 +3,7 @@
 package qlutchapi
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
@@ -14,12 +15,22 @@ type APIResponse[T any] struct {
 	StatusCode int
 	Body       T
 	RequestID  string
+	Raw        []byte
 }
 
 type Client struct {
 	BaseURL string
 	HTTP    *http.Client
 }
+
+// CallMeta carries optional request metadata. RequestID is sent as X-Request-Id.
+// Bearer is the access token without the Bearer prefix.
+type CallMeta struct {
+	RequestID string
+	Bearer    string
+}
+
+type Empty struct{}
 
 type HealthStatus struct {
 	Status string `json:"status"`
@@ -30,25 +41,263 @@ type ReadyStatus struct {
 	Checks map[string]string `json:"checks,omitempty"`
 }
 
+type RegionCode string
+
+const (
+	RegionCodeValue86  RegionCode = "+86"
+	RegionCodeValue852 RegionCode = "+852"
+)
+
+type Locale string
+
+const (
+	LocaleZhHans Locale = "zh-Hans"
+	LocaleZhHant Locale = "zh-Hant"
+)
+
+type OtpPurpose string
+
+const (
+	OtpPurposeRegister OtpPurpose = "register"
+	OtpPurposeLogin    OtpPurpose = "login"
+)
+
+type NextStep string
+
+const (
+	NextStepNEEDONBOARDING NextStep = "NEED_ONBOARDING"
+	NextStepNEEDFIRSTPACK  NextStep = "NEED_FIRST_PACK"
+	NextStepREADYHOME      NextStep = "READY_HOME"
+)
+
+type StepId string
+
+const (
+	StepIdNickname     StepId = "nickname"
+	StepIdAge          StepId = "age"
+	StepIdStudyOrWork  StepId = "study_or_work"
+	StepIdIdentity     StepId = "identity"
+	StepIdHowToAddress StepId = "how_to_address"
+	StepIdExamTrack    StepId = "exam_track"
+	StepIdDailyTime    StepId = "daily_time"
+)
+
+type OtpSendRequest struct {
+	Region_code    RegionCode `json:"region_code"`
+	Phone_national string     `json:"phone_national"`
+	Purpose        OtpPurpose `json:"purpose"`
+	Locale         *Locale    `json:"locale,omitempty"`
+}
+
+type OtpSendResponse struct {
+	Retry_after_seconds int64   `json:"retry_after_seconds"`
+	Destination_hint    *string `json:"destination_hint,omitempty"`
+}
+
+type OtpVerifyRequest struct {
+	Region_code    RegionCode `json:"region_code"`
+	Phone_national string     `json:"phone_national"`
+	Purpose        OtpPurpose `json:"purpose"`
+	Code           string     `json:"code"`
+	Locale         *Locale    `json:"locale,omitempty"`
+}
+
+type SessionRefreshRequest struct {
+	Refresh_token string `json:"refresh_token"`
+}
+
+type SessionRevokeRequest struct {
+	Refresh_token *string `json:"refresh_token,omitempty"`
+}
+
+type AccountSummary struct {
+	User_id              string `json:"user_id"`
+	Is_new_user          bool   `json:"is_new_user"`
+	Onboarding_completed bool   `json:"onboarding_completed"`
+	Has_first_pack       bool   `json:"has_first_pack"`
+}
+
+type IdentityProfile struct {
+	Locale      Locale     `json:"locale"`
+	Region_code RegionCode `json:"region_code"`
+}
+
+type IdentityProfileUpdate struct {
+	Locale      *Locale     `json:"locale,omitempty"`
+	Region_code *RegionCode `json:"region_code,omitempty"`
+}
+
+type SessionResponse struct {
+	Access_token  string          `json:"access_token"`
+	Refresh_token string          `json:"refresh_token"`
+	Expires_in    int64           `json:"expires_in"`
+	Account       AccountSummary  `json:"account"`
+	Next_step     NextStep        `json:"next_step"`
+	Profile       IdentityProfile `json:"profile"`
+}
+
+type OnboardingStepState struct {
+	Step_id StepId  `json:"step_id"`
+	Index   int64   `json:"index"`
+	Status  string  `json:"status"`
+	Answer  *string `json:"answer"`
+}
+
+const (
+	OnboardingStepStateStatusPending   = "pending"
+	OnboardingStepStateStatusCompleted = "completed"
+)
+
+type OnboardingState struct {
+	Current_step_id *string               `json:"current_step_id"`
+	Current_index   int64                 `json:"current_index"`
+	Completed       bool                  `json:"completed"`
+	Nickname        *string               `json:"nickname"`
+	Steps           []OnboardingStepState `json:"steps"`
+	Account         AccountSummary        `json:"account"`
+	Next_step       NextStep              `json:"next_step"`
+}
+
+const (
+	OnboardingStateCurrent_step_idNickname     = "nickname"
+	OnboardingStateCurrent_step_idAge          = "age"
+	OnboardingStateCurrent_step_idStudyOrWork  = "study_or_work"
+	OnboardingStateCurrent_step_idIdentity     = "identity"
+	OnboardingStateCurrent_step_idHowToAddress = "how_to_address"
+	OnboardingStateCurrent_step_idExamTrack    = "exam_track"
+	OnboardingStateCurrent_step_idDailyTime    = "daily_time"
+)
+
+type OnboardingWriteRequest struct {
+	Step_id  StepId  `json:"step_id"`
+	Nickname *string `json:"nickname,omitempty"`
+	Answer   *string `json:"answer,omitempty"`
+}
+
+type ErrorBody struct {
+	Error      ErrorBodyError `json:"error"`
+	Request_id string         `json:"request_id"`
+}
+
+type ErrorBodyError struct {
+	Code    string          `json:"code"`
+	Message string          `json:"message"`
+	Details json.RawMessage `json:"details,omitempty"`
+}
+
+const (
+	ErrorBodyErrorCodeAUTHREQUIRED                = "AUTH_REQUIRED"
+	ErrorBodyErrorCodeAUTHEXPIRED                 = "AUTH_EXPIRED"
+	ErrorBodyErrorCodeAUTHFORBIDDEN               = "AUTH_FORBIDDEN"
+	ErrorBodyErrorCodeAUTHWRONGREALM              = "AUTH_WRONG_REALM"
+	ErrorBodyErrorCodeAUTHACCOUNTNOTFOUND         = "AUTH_ACCOUNT_NOT_FOUND"
+	ErrorBodyErrorCodeAUTHACCOUNTEXISTS           = "AUTH_ACCOUNT_EXISTS"
+	ErrorBodyErrorCodeAUTHOTPINVALID              = "AUTH_OTP_INVALID"
+	ErrorBodyErrorCodeAUTHOTPEXPIRED              = "AUTH_OTP_EXPIRED"
+	ErrorBodyErrorCodeAUTHOTPMAXATTEMPTS          = "AUTH_OTP_MAX_ATTEMPTS"
+	ErrorBodyErrorCodeVALIDATIONINVALIDPHONE      = "VALIDATION_INVALID_PHONE"
+	ErrorBodyErrorCodeVALIDATIONUNSUPPORTEDREGION = "VALIDATION_UNSUPPORTED_REGION"
+	ErrorBodyErrorCodeVALIDATIONUNSUPPORTEDLOCALE = "VALIDATION_UNSUPPORTED_LOCALE"
+	ErrorBodyErrorCodeVALIDATIONINVALIDPURPOSE    = "VALIDATION_INVALID_PURPOSE"
+	ErrorBodyErrorCodeVALIDATIONINVALIDOTPFORMAT  = "VALIDATION_INVALID_OTP_FORMAT"
+	ErrorBodyErrorCodeVALIDATIONMISSINGFIELD      = "VALIDATION_MISSING_FIELD"
+	ErrorBodyErrorCodeVALIDATIONNICKNAME          = "VALIDATION_NICKNAME"
+	ErrorBodyErrorCodeVALIDATIONINVALIDSTEP       = "VALIDATION_INVALID_STEP"
+	ErrorBodyErrorCodeVALIDATIONINVALIDSTEPANSWER = "VALIDATION_INVALID_STEP_ANSWER"
+	ErrorBodyErrorCodeVALIDATIONSTEPOUTOFORDER    = "VALIDATION_STEP_OUT_OF_ORDER"
+	ErrorBodyErrorCodeIDEMPOTENCYKEYMISMATCH      = "IDEMPOTENCY_KEY_MISMATCH"
+	ErrorBodyErrorCodeRATELIMITED                 = "RATE_LIMITED"
+	ErrorBodyErrorCodeINTERNAL                    = "INTERNAL"
+)
+
 func (c *Client) GetHealth(ctx context.Context) (APIResponse[HealthStatus], error) {
-	return doJSON[HealthStatus](ctx, c, http.MethodGet, "/healthz")
+	var payload any
+	return doJSON[HealthStatus](ctx, c, http.MethodGet, "/healthz", payload, "", "", "")
 }
 
 func (c *Client) GetReady(ctx context.Context) (APIResponse[ReadyStatus], error) {
-	return doJSON[ReadyStatus](ctx, c, http.MethodGet, "/readyz")
+	var payload any
+	return doJSON[ReadyStatus](ctx, c, http.MethodGet, "/readyz", payload, "", "", "")
 }
 
-func doJSON[T any](ctx context.Context, client *Client, method, path string) (APIResponse[T], error) {
+func (c *Client) SendIdentityOtp(ctx context.Context, idempotencyKey string, body OtpSendRequest, meta CallMeta) (APIResponse[OtpSendResponse], error) {
+	payload := any(body)
+	return doJSON[OtpSendResponse](ctx, c, http.MethodPost, "/v1/identity/otp/send", payload, idempotencyKey, meta.RequestID, meta.Bearer)
+}
+
+func (c *Client) VerifyIdentityOtp(ctx context.Context, body OtpVerifyRequest, meta CallMeta) (APIResponse[SessionResponse], error) {
+	payload := any(body)
+	return doJSON[SessionResponse](ctx, c, http.MethodPost, "/v1/identity/otp/verify", payload, "", meta.RequestID, meta.Bearer)
+}
+
+func (c *Client) RefreshIdentitySession(ctx context.Context, body SessionRefreshRequest, meta CallMeta) (APIResponse[SessionResponse], error) {
+	payload := any(body)
+	return doJSON[SessionResponse](ctx, c, http.MethodPost, "/v1/identity/session/refresh", payload, "", meta.RequestID, meta.Bearer)
+}
+
+func (c *Client) RevokeIdentitySession(ctx context.Context, body *SessionRevokeRequest, meta CallMeta) (APIResponse[Empty], error) {
+	var payload any
+	if body != nil {
+		payload = body
+	}
+	return doJSON[Empty](ctx, c, http.MethodPost, "/v1/identity/session/revoke", payload, "", meta.RequestID, meta.Bearer)
+}
+
+func (c *Client) GetIdentityOnboarding(ctx context.Context, meta CallMeta) (APIResponse[OnboardingState], error) {
+	var payload any
+	return doJSON[OnboardingState](ctx, c, http.MethodGet, "/v1/identity/onboarding", payload, "", meta.RequestID, meta.Bearer)
+}
+
+func (c *Client) PutIdentityOnboarding(ctx context.Context, body OnboardingWriteRequest, meta CallMeta) (APIResponse[OnboardingState], error) {
+	payload := any(body)
+	return doJSON[OnboardingState](ctx, c, http.MethodPut, "/v1/identity/onboarding", payload, "", meta.RequestID, meta.Bearer)
+}
+
+func (c *Client) GetIdentityProfile(ctx context.Context, meta CallMeta) (APIResponse[IdentityProfile], error) {
+	var payload any
+	return doJSON[IdentityProfile](ctx, c, http.MethodGet, "/v1/identity/profile", payload, "", meta.RequestID, meta.Bearer)
+}
+
+func (c *Client) PutIdentityProfile(ctx context.Context, body IdentityProfileUpdate, meta CallMeta) (APIResponse[IdentityProfile], error) {
+	payload := any(body)
+	return doJSON[IdentityProfile](ctx, c, http.MethodPut, "/v1/identity/profile", payload, "", meta.RequestID, meta.Bearer)
+}
+
+func doJSON[T any](ctx context.Context, client *Client, method, path string, body any, idempotencyKey, requestID, bearer string) (APIResponse[T], error) {
 	var zero APIResponse[T]
 	if client == nil || client.BaseURL == "" {
 		return zero, errString("missing base url")
 	}
 	endpoint := strings.TrimRight(client.BaseURL, "/") + path
-	req, err := http.NewRequestWithContext(ctx, method, endpoint, nil)
+	var reader *bytes.Reader
+	if body != nil {
+		payload, err := json.Marshal(body)
+		if err != nil {
+			return zero, err
+		}
+		reader = bytes.NewReader(payload)
+	}
+	var reqBody io.Reader
+	if reader != nil {
+		reqBody = reader
+	}
+	req, err := http.NewRequestWithContext(ctx, method, endpoint, reqBody)
 	if err != nil {
 		return zero, err
 	}
 	req.Header.Set("Accept", "application/json")
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	if idempotencyKey != "" {
+		req.Header.Set("Idempotency-Key", idempotencyKey)
+	}
+	if requestID != "" {
+		req.Header.Set("X-Request-Id", requestID)
+	}
+	if bearer != "" {
+		req.Header.Set("Authorization", "Bearer "+bearer)
+	}
 	httpClient := client.HTTP
 	if httpClient == nil {
 		httpClient = http.DefaultClient
@@ -62,15 +311,17 @@ func doJSON[T any](ctx context.Context, client *Client, method, path string) (AP
 	if err != nil {
 		return zero, err
 	}
-	var decoded T
-	if err := json.Unmarshal(payload, &decoded); err != nil {
+	result := APIResponse[T]{StatusCode: resp.StatusCode, RequestID: resp.Header.Get("X-Request-Id"), Raw: payload}
+	if resp.StatusCode == http.StatusNoContent || len(payload) == 0 {
+		return result, nil
+	}
+	if err := json.Unmarshal(payload, &result.Body); err != nil {
+		if resp.StatusCode >= 400 {
+			return result, nil
+		}
 		return zero, err
 	}
-	return APIResponse[T]{
-		StatusCode: resp.StatusCode,
-		Body:       decoded,
-		RequestID:  resp.Header.Get("X-Request-Id"),
-	}, nil
+	return result, nil
 }
 
 type errString string

@@ -2,6 +2,37 @@
 
 import { http } from '@kit.NetworkKit'
 
+export class RegionCodeValues {
+  static readonly RegionCodeValue86: string = "+86"
+  static readonly RegionCodeValue852: string = "+852"
+}
+
+export class LocaleValues {
+  static readonly LocaleZhHans: string = "zh-Hans"
+  static readonly LocaleZhHant: string = "zh-Hant"
+}
+
+export class OtpPurposeValues {
+  static readonly OtpPurposeRegister: string = "register"
+  static readonly OtpPurposeLogin: string = "login"
+}
+
+export class NextStepValues {
+  static readonly NextStepNEEDONBOARDING: string = "NEED_ONBOARDING"
+  static readonly NextStepNEEDFIRSTPACK: string = "NEED_FIRST_PACK"
+  static readonly NextStepREADYHOME: string = "READY_HOME"
+}
+
+export class StepIdValues {
+  static readonly StepIdNickname: string = "nickname"
+  static readonly StepIdAge: string = "age"
+  static readonly StepIdStudyOrWork: string = "study_or_work"
+  static readonly StepIdIdentity: string = "identity"
+  static readonly StepIdHowToAddress: string = "how_to_address"
+  static readonly StepIdExamTrack: string = "exam_track"
+  static readonly StepIdDailyTime: string = "daily_time"
+}
+
 export class HealthStatus {
   status: string = ''
 }
@@ -10,6 +41,96 @@ export class ReadyStatus {
   status: string = ''
   checks: Record<string, string> | null = null
 }
+
+export class OtpSendRequest {
+  region_code: string = ''
+  phone_national: string = ''
+  purpose: string = ''
+  locale: string = ''
+}
+
+export class OtpSendResponse {
+  retry_after_seconds: number = 0
+  destination_hint: string = ''
+}
+
+export class OtpVerifyRequest {
+  region_code: string = ''
+  phone_national: string = ''
+  purpose: string = ''
+  code: string = ''
+  locale: string = ''
+}
+
+export class SessionRefreshRequest {
+  refresh_token: string = ''
+}
+
+export class SessionRevokeRequest {
+  refresh_token: string = ''
+}
+
+export class AccountSummary {
+  user_id: string = ''
+  is_new_user: boolean = false
+  onboarding_completed: boolean = false
+  has_first_pack: boolean = false
+}
+
+export class IdentityProfile {
+  locale: string = ''
+  region_code: string = ''
+}
+
+export class IdentityProfileUpdate {
+  locale: string = ''
+  region_code: string = ''
+}
+
+export class SessionResponse {
+  access_token: string = ''
+  refresh_token: string = ''
+  expires_in: number = 0
+  account: AccountSummary = new AccountSummary()
+  next_step: string = ''
+  profile: IdentityProfile = new IdentityProfile()
+}
+
+export class OnboardingStepState {
+  step_id: string = ''
+  index: number = 0
+  status: string = ''
+  answer: string | null = null
+}
+
+export class OnboardingState {
+  current_step_id: string | null = null
+  current_index: number = 0
+  completed: boolean = false
+  nickname: string | null = null
+  steps: Array<OnboardingStepState> = []
+  account: AccountSummary = new AccountSummary()
+  next_step: string = ''
+}
+
+export class OnboardingWriteRequest {
+  step_id: string = ''
+  nickname: string = ''
+  answer: string = ''
+}
+
+export class ErrorBody {
+  error: ErrorBodyError = new ErrorBodyError()
+  request_id: string = ''
+}
+
+export class ErrorBodyError {
+  code: string = ''
+  message: string = ''
+  details: string = ''
+}
+
+export class Empty {}
 
 export class GetHealthResult {
   statusCode: number = 0
@@ -23,13 +144,66 @@ export class GetReadyResult {
   body: ReadyStatus = new ReadyStatus()
 }
 
+export class SendIdentityOtpResult {
+  statusCode: number = 0
+  requestId: string = ''
+  body: OtpSendResponse = new OtpSendResponse()
+}
+
+export class VerifyIdentityOtpResult {
+  statusCode: number = 0
+  requestId: string = ''
+  body: SessionResponse = new SessionResponse()
+}
+
+export class RefreshIdentitySessionResult {
+  statusCode: number = 0
+  requestId: string = ''
+  body: SessionResponse = new SessionResponse()
+}
+
+export class RevokeIdentitySessionResult {
+  statusCode: number = 0
+  requestId: string = ''
+  body: Empty = new Empty()
+}
+
+export class GetIdentityOnboardingResult {
+  statusCode: number = 0
+  requestId: string = ''
+  body: OnboardingState = new OnboardingState()
+}
+
+export class PutIdentityOnboardingResult {
+  statusCode: number = 0
+  requestId: string = ''
+  body: OnboardingState = new OnboardingState()
+}
+
+export class GetIdentityProfileResult {
+  statusCode: number = 0
+  requestId: string = ''
+  body: IdentityProfile = new IdentityProfile()
+}
+
+export class PutIdentityProfileResult {
+  statusCode: number = 0
+  requestId: string = ''
+  body: IdentityProfile = new IdentityProfile()
+}
+
 export function getHealth(baseUrl: string): Promise<GetHealthResult> {
-  return request(joinURL(baseUrl, '/healthz'), http.RequestMethod.GET).then((response: http.HttpResponse) => {
+  const extra = new RequestExtra()
+
+  return request(joinURL(baseUrl, '/healthz'), http.RequestMethod.GET, extra).then((response: http.HttpResponse) => {
     const result = new GetHealthResult()
     result.statusCode = response.responseCode
     const header = response.header['X-Request-Id']
     if (header !== undefined && header !== null) {
       result.requestId = String(header)
+    }
+    if (response.responseCode === 204) {
+      return result
     }
     const parsed = JSON.parse(response.result.toString()) as Record<string, Object>
     result.body = readHealthStatus(parsed)
@@ -38,12 +212,17 @@ export function getHealth(baseUrl: string): Promise<GetHealthResult> {
 }
 
 export function getReady(baseUrl: string): Promise<GetReadyResult> {
-  return request(joinURL(baseUrl, '/readyz'), http.RequestMethod.GET).then((response: http.HttpResponse) => {
+  const extra = new RequestExtra()
+
+  return request(joinURL(baseUrl, '/readyz'), http.RequestMethod.GET, extra).then((response: http.HttpResponse) => {
     const result = new GetReadyResult()
     result.statusCode = response.responseCode
     const header = response.header['X-Request-Id']
     if (header !== undefined && header !== null) {
       result.requestId = String(header)
+    }
+    if (response.responseCode === 204) {
+      return result
     }
     const parsed = JSON.parse(response.result.toString()) as Record<string, Object>
     result.body = readReadyStatus(parsed)
@@ -51,12 +230,267 @@ export function getReady(baseUrl: string): Promise<GetReadyResult> {
   })
 }
 
-function request(url: string, method: http.RequestMethod): Promise<http.HttpResponse> {
+export function sendIdentityOtp(baseUrl: string, idempotencyKey: string, body: OtpSendRequest, requestId?: string): Promise<SendIdentityOtpResult> {
+  const extra = new RequestExtra()
+  if (body !== undefined && body !== null) {
+    extra.body = writeOtpSendRequest(body)
+  }
+  extra.idempotencyKey = idempotencyKey
+  if (requestId !== undefined && requestId !== null) {
+    extra.requestId = requestId
+  }
+  return request(joinURL(baseUrl, '/v1/identity/otp/send'), http.RequestMethod.POST, extra).then((response: http.HttpResponse) => {
+    const result = new SendIdentityOtpResult()
+    result.statusCode = response.responseCode
+    const header = response.header['X-Request-Id']
+    if (header !== undefined && header !== null) {
+      result.requestId = String(header)
+    }
+    if (response.responseCode === 204) {
+      return result
+    }
+    const parsed = JSON.parse(response.result.toString()) as Record<string, Object>
+    result.body = readOtpSendResponse(parsed)
+    return result
+  })
+}
+
+export function verifyIdentityOtp(baseUrl: string, body: OtpVerifyRequest, requestId?: string): Promise<VerifyIdentityOtpResult> {
+  const extra = new RequestExtra()
+  if (body !== undefined && body !== null) {
+    extra.body = writeOtpVerifyRequest(body)
+  }
+  if (requestId !== undefined && requestId !== null) {
+    extra.requestId = requestId
+  }
+  return request(joinURL(baseUrl, '/v1/identity/otp/verify'), http.RequestMethod.POST, extra).then((response: http.HttpResponse) => {
+    const result = new VerifyIdentityOtpResult()
+    result.statusCode = response.responseCode
+    const header = response.header['X-Request-Id']
+    if (header !== undefined && header !== null) {
+      result.requestId = String(header)
+    }
+    if (response.responseCode === 204) {
+      return result
+    }
+    const parsed = JSON.parse(response.result.toString()) as Record<string, Object>
+    result.body = readSessionResponse(parsed)
+    return result
+  })
+}
+
+export function refreshIdentitySession(baseUrl: string, body: SessionRefreshRequest, requestId?: string): Promise<RefreshIdentitySessionResult> {
+  const extra = new RequestExtra()
+  if (body !== undefined && body !== null) {
+    extra.body = writeSessionRefreshRequest(body)
+  }
+  if (requestId !== undefined && requestId !== null) {
+    extra.requestId = requestId
+  }
+  return request(joinURL(baseUrl, '/v1/identity/session/refresh'), http.RequestMethod.POST, extra).then((response: http.HttpResponse) => {
+    const result = new RefreshIdentitySessionResult()
+    result.statusCode = response.responseCode
+    const header = response.header['X-Request-Id']
+    if (header !== undefined && header !== null) {
+      result.requestId = String(header)
+    }
+    if (response.responseCode === 204) {
+      return result
+    }
+    const parsed = JSON.parse(response.result.toString()) as Record<string, Object>
+    result.body = readSessionResponse(parsed)
+    return result
+  })
+}
+
+export function revokeIdentitySession(baseUrl: string, body: SessionRevokeRequest | null, requestId?: string, bearer?: string): Promise<RevokeIdentitySessionResult> {
+  const extra = new RequestExtra()
+  if (body !== undefined && body !== null) {
+    extra.body = writeSessionRevokeRequest(body)
+  }
+  if (requestId !== undefined && requestId !== null) {
+    extra.requestId = requestId
+  }
+  if (bearer !== undefined && bearer !== null) {
+    extra.bearer = bearer
+  }
+  return request(joinURL(baseUrl, '/v1/identity/session/revoke'), http.RequestMethod.POST, extra).then((response: http.HttpResponse) => {
+    const result = new RevokeIdentitySessionResult()
+    result.statusCode = response.responseCode
+    const header = response.header['X-Request-Id']
+    if (header !== undefined && header !== null) {
+      result.requestId = String(header)
+    }
+    if (response.responseCode === 204) {
+      return result
+    }
+    const parsed = JSON.parse(response.result.toString()) as Record<string, Object>
+    result.body = readEmpty(parsed)
+    return result
+  })
+}
+
+export function getIdentityOnboarding(baseUrl: string, requestId?: string, bearer?: string): Promise<GetIdentityOnboardingResult> {
+  const extra = new RequestExtra()
+  if (requestId !== undefined && requestId !== null) {
+    extra.requestId = requestId
+  }
+  if (bearer !== undefined && bearer !== null) {
+    extra.bearer = bearer
+  }
+  return request(joinURL(baseUrl, '/v1/identity/onboarding'), http.RequestMethod.GET, extra).then((response: http.HttpResponse) => {
+    const result = new GetIdentityOnboardingResult()
+    result.statusCode = response.responseCode
+    const header = response.header['X-Request-Id']
+    if (header !== undefined && header !== null) {
+      result.requestId = String(header)
+    }
+    if (response.responseCode === 204) {
+      return result
+    }
+    const parsed = JSON.parse(response.result.toString()) as Record<string, Object>
+    result.body = readOnboardingState(parsed)
+    return result
+  })
+}
+
+export function putIdentityOnboarding(baseUrl: string, body: OnboardingWriteRequest, requestId?: string, bearer?: string): Promise<PutIdentityOnboardingResult> {
+  const extra = new RequestExtra()
+  if (body !== undefined && body !== null) {
+    extra.body = writeOnboardingWriteRequest(body)
+  }
+  if (requestId !== undefined && requestId !== null) {
+    extra.requestId = requestId
+  }
+  if (bearer !== undefined && bearer !== null) {
+    extra.bearer = bearer
+  }
+  return request(joinURL(baseUrl, '/v1/identity/onboarding'), http.RequestMethod.PUT, extra).then((response: http.HttpResponse) => {
+    const result = new PutIdentityOnboardingResult()
+    result.statusCode = response.responseCode
+    const header = response.header['X-Request-Id']
+    if (header !== undefined && header !== null) {
+      result.requestId = String(header)
+    }
+    if (response.responseCode === 204) {
+      return result
+    }
+    const parsed = JSON.parse(response.result.toString()) as Record<string, Object>
+    result.body = readOnboardingState(parsed)
+    return result
+  })
+}
+
+export function getIdentityProfile(baseUrl: string, requestId?: string, bearer?: string): Promise<GetIdentityProfileResult> {
+  const extra = new RequestExtra()
+  if (requestId !== undefined && requestId !== null) {
+    extra.requestId = requestId
+  }
+  if (bearer !== undefined && bearer !== null) {
+    extra.bearer = bearer
+  }
+  return request(joinURL(baseUrl, '/v1/identity/profile'), http.RequestMethod.GET, extra).then((response: http.HttpResponse) => {
+    const result = new GetIdentityProfileResult()
+    result.statusCode = response.responseCode
+    const header = response.header['X-Request-Id']
+    if (header !== undefined && header !== null) {
+      result.requestId = String(header)
+    }
+    if (response.responseCode === 204) {
+      return result
+    }
+    const parsed = JSON.parse(response.result.toString()) as Record<string, Object>
+    result.body = readIdentityProfile(parsed)
+    return result
+  })
+}
+
+export function putIdentityProfile(baseUrl: string, body: IdentityProfileUpdate, requestId?: string, bearer?: string): Promise<PutIdentityProfileResult> {
+  const extra = new RequestExtra()
+  if (body !== undefined && body !== null) {
+    extra.body = writeIdentityProfileUpdate(body)
+  }
+  if (requestId !== undefined && requestId !== null) {
+    extra.requestId = requestId
+  }
+  if (bearer !== undefined && bearer !== null) {
+    extra.bearer = bearer
+  }
+  return request(joinURL(baseUrl, '/v1/identity/profile'), http.RequestMethod.PUT, extra).then((response: http.HttpResponse) => {
+    const result = new PutIdentityProfileResult()
+    result.statusCode = response.responseCode
+    const header = response.header['X-Request-Id']
+    if (header !== undefined && header !== null) {
+      result.requestId = String(header)
+    }
+    if (response.responseCode === 204) {
+      return result
+    }
+    const parsed = JSON.parse(response.result.toString()) as Record<string, Object>
+    result.body = readIdentityProfile(parsed)
+    return result
+  })
+}
+
+function writeOtpSendRequest(body: OtpSendRequest): string {
+  return JSON.stringify(body)
+}
+
+function writeOtpVerifyRequest(body: OtpVerifyRequest): string {
+  return JSON.stringify(body)
+}
+
+function writeSessionRefreshRequest(body: SessionRefreshRequest): string {
+  return JSON.stringify(body)
+}
+
+function writeSessionRevokeRequest(body: SessionRevokeRequest): string {
+  return JSON.stringify(body)
+}
+
+function writeOnboardingWriteRequest(body: OnboardingWriteRequest): string {
+  return JSON.stringify(body)
+}
+
+function writeIdentityProfileUpdate(body: IdentityProfileUpdate): string {
+  return JSON.stringify(body)
+}
+
+function readEmpty(_parsed: Record<string, Object>): Empty {
+  return new Empty()
+}
+
+class RequestExtra {
+  body: string = ''
+  idempotencyKey: string = ''
+  requestId: string = ''
+  bearer: string = ''
+}
+
+function request(url: string, method: http.RequestMethod, extra?: RequestExtra | null): Promise<http.HttpResponse> {
   return new Promise((resolve: (value: http.HttpResponse) => void, reject: (reason: Error) => void) => {
     const client = http.createHttp()
+    const header: Record<string, string> = { 'Accept': 'application/json' }
+    let data = ''
+    if (extra !== undefined && extra !== null) {
+      if (extra.body.length > 0) {
+        header['Content-Type'] = 'application/json'
+        data = extra.body
+      }
+      if (extra.idempotencyKey.length > 0) {
+        header['Idempotency-Key'] = extra.idempotencyKey
+      }
+      if (extra.requestId.length > 0) {
+        header['X-Request-Id'] = extra.requestId
+      }
+      if (extra.bearer.length > 0) {
+        header['Authorization'] = 'Bearer ' + extra.bearer
+      }
+    }
     client.request(url, {
       method: method,
-      header: { 'Accept': 'application/json' },
+      header: header,
+      extraData: data,
       connectTimeout: 5000,
       readTimeout: 5000,
       expectDataType: http.HttpDataType.STRING
@@ -82,7 +516,9 @@ function joinURL(baseUrl: string, path: string): string {
 function readHealthStatus(parsed: Record<string, Object>): HealthStatus {
   const body = new HealthStatus()
   const statusValue = parsed['status']
-  if (statusValue !== undefined && statusValue !== null) {
+  if (statusValue === null) {
+    body.status = ''
+  } else if (statusValue !== undefined) {
     body.status = statusValue as string
   }
   return body
@@ -91,11 +527,353 @@ function readHealthStatus(parsed: Record<string, Object>): HealthStatus {
 function readReadyStatus(parsed: Record<string, Object>): ReadyStatus {
   const body = new ReadyStatus()
   const statusValue = parsed['status']
-  if (statusValue !== undefined && statusValue !== null) {
+  if (statusValue === null) {
+    body.status = ''
+  } else if (statusValue !== undefined) {
     body.status = statusValue as string
   }
   body.checks = readStringMap(parsed['checks'])
   return body
+}
+
+function readOtpSendRequest(parsed: Record<string, Object>): OtpSendRequest {
+  const body = new OtpSendRequest()
+  const region_codeValue = parsed['region_code']
+  if (region_codeValue === null) {
+    body.region_code = ''
+  } else if (region_codeValue !== undefined) {
+    body.region_code = region_codeValue as string
+  }
+  const phone_nationalValue = parsed['phone_national']
+  if (phone_nationalValue === null) {
+    body.phone_national = ''
+  } else if (phone_nationalValue !== undefined) {
+    body.phone_national = phone_nationalValue as string
+  }
+  const purposeValue = parsed['purpose']
+  if (purposeValue === null) {
+    body.purpose = ''
+  } else if (purposeValue !== undefined) {
+    body.purpose = purposeValue as string
+  }
+  const localeValue = parsed['locale']
+  if (localeValue === null) {
+    body.locale = ''
+  } else if (localeValue !== undefined) {
+    body.locale = localeValue as string
+  }
+  return body
+}
+
+function readOtpSendResponse(parsed: Record<string, Object>): OtpSendResponse {
+  const body = new OtpSendResponse()
+  const retry_after_secondsValue = parsed['retry_after_seconds']
+  if (retry_after_secondsValue === null) {
+    body.retry_after_seconds = 0
+  } else if (retry_after_secondsValue !== undefined) {
+    body.retry_after_seconds = retry_after_secondsValue as number
+  }
+  const destination_hintValue = parsed['destination_hint']
+  if (destination_hintValue === null) {
+    body.destination_hint = ''
+  } else if (destination_hintValue !== undefined) {
+    body.destination_hint = destination_hintValue as string
+  }
+  return body
+}
+
+function readOtpVerifyRequest(parsed: Record<string, Object>): OtpVerifyRequest {
+  const body = new OtpVerifyRequest()
+  const region_codeValue = parsed['region_code']
+  if (region_codeValue === null) {
+    body.region_code = ''
+  } else if (region_codeValue !== undefined) {
+    body.region_code = region_codeValue as string
+  }
+  const phone_nationalValue = parsed['phone_national']
+  if (phone_nationalValue === null) {
+    body.phone_national = ''
+  } else if (phone_nationalValue !== undefined) {
+    body.phone_national = phone_nationalValue as string
+  }
+  const purposeValue = parsed['purpose']
+  if (purposeValue === null) {
+    body.purpose = ''
+  } else if (purposeValue !== undefined) {
+    body.purpose = purposeValue as string
+  }
+  const codeValue = parsed['code']
+  if (codeValue === null) {
+    body.code = ''
+  } else if (codeValue !== undefined) {
+    body.code = codeValue as string
+  }
+  const localeValue = parsed['locale']
+  if (localeValue === null) {
+    body.locale = ''
+  } else if (localeValue !== undefined) {
+    body.locale = localeValue as string
+  }
+  return body
+}
+
+function readSessionRefreshRequest(parsed: Record<string, Object>): SessionRefreshRequest {
+  const body = new SessionRefreshRequest()
+  const refresh_tokenValue = parsed['refresh_token']
+  if (refresh_tokenValue === null) {
+    body.refresh_token = ''
+  } else if (refresh_tokenValue !== undefined) {
+    body.refresh_token = refresh_tokenValue as string
+  }
+  return body
+}
+
+function readSessionRevokeRequest(parsed: Record<string, Object>): SessionRevokeRequest {
+  const body = new SessionRevokeRequest()
+  const refresh_tokenValue = parsed['refresh_token']
+  if (refresh_tokenValue === null) {
+    body.refresh_token = ''
+  } else if (refresh_tokenValue !== undefined) {
+    body.refresh_token = refresh_tokenValue as string
+  }
+  return body
+}
+
+function readAccountSummary(parsed: Record<string, Object>): AccountSummary {
+  const body = new AccountSummary()
+  const user_idValue = parsed['user_id']
+  if (user_idValue === null) {
+    body.user_id = ''
+  } else if (user_idValue !== undefined) {
+    body.user_id = user_idValue as string
+  }
+  const is_new_userValue = parsed['is_new_user']
+  if (is_new_userValue === null) {
+    body.is_new_user = false
+  } else if (is_new_userValue !== undefined) {
+    body.is_new_user = is_new_userValue as boolean
+  }
+  const onboarding_completedValue = parsed['onboarding_completed']
+  if (onboarding_completedValue === null) {
+    body.onboarding_completed = false
+  } else if (onboarding_completedValue !== undefined) {
+    body.onboarding_completed = onboarding_completedValue as boolean
+  }
+  const has_first_packValue = parsed['has_first_pack']
+  if (has_first_packValue === null) {
+    body.has_first_pack = false
+  } else if (has_first_packValue !== undefined) {
+    body.has_first_pack = has_first_packValue as boolean
+  }
+  return body
+}
+
+function readIdentityProfile(parsed: Record<string, Object>): IdentityProfile {
+  const body = new IdentityProfile()
+  const localeValue = parsed['locale']
+  if (localeValue === null) {
+    body.locale = ''
+  } else if (localeValue !== undefined) {
+    body.locale = localeValue as string
+  }
+  const region_codeValue = parsed['region_code']
+  if (region_codeValue === null) {
+    body.region_code = ''
+  } else if (region_codeValue !== undefined) {
+    body.region_code = region_codeValue as string
+  }
+  return body
+}
+
+function readIdentityProfileUpdate(parsed: Record<string, Object>): IdentityProfileUpdate {
+  const body = new IdentityProfileUpdate()
+  const localeValue = parsed['locale']
+  if (localeValue === null) {
+    body.locale = ''
+  } else if (localeValue !== undefined) {
+    body.locale = localeValue as string
+  }
+  const region_codeValue = parsed['region_code']
+  if (region_codeValue === null) {
+    body.region_code = ''
+  } else if (region_codeValue !== undefined) {
+    body.region_code = region_codeValue as string
+  }
+  return body
+}
+
+function readSessionResponse(parsed: Record<string, Object>): SessionResponse {
+  const body = new SessionResponse()
+  const access_tokenValue = parsed['access_token']
+  if (access_tokenValue === null) {
+    body.access_token = ''
+  } else if (access_tokenValue !== undefined) {
+    body.access_token = access_tokenValue as string
+  }
+  const refresh_tokenValue = parsed['refresh_token']
+  if (refresh_tokenValue === null) {
+    body.refresh_token = ''
+  } else if (refresh_tokenValue !== undefined) {
+    body.refresh_token = refresh_tokenValue as string
+  }
+  const expires_inValue = parsed['expires_in']
+  if (expires_inValue === null) {
+    body.expires_in = 0
+  } else if (expires_inValue !== undefined) {
+    body.expires_in = expires_inValue as number
+  }
+  const accountValue = parsed['account']
+  if (accountValue !== undefined && accountValue !== null) {
+    body.account = readAccountSummary(accountValue as Record<string, Object>)
+  }
+  const next_stepValue = parsed['next_step']
+  if (next_stepValue === null) {
+    body.next_step = ''
+  } else if (next_stepValue !== undefined) {
+    body.next_step = next_stepValue as string
+  }
+  const profileValue = parsed['profile']
+  if (profileValue !== undefined && profileValue !== null) {
+    body.profile = readIdentityProfile(profileValue as Record<string, Object>)
+  }
+  return body
+}
+
+function readOnboardingStepState(parsed: Record<string, Object>): OnboardingStepState {
+  const body = new OnboardingStepState()
+  const step_idValue = parsed['step_id']
+  if (step_idValue === null) {
+    body.step_id = ''
+  } else if (step_idValue !== undefined) {
+    body.step_id = step_idValue as string
+  }
+  const indexValue = parsed['index']
+  if (indexValue === null) {
+    body.index = 0
+  } else if (indexValue !== undefined) {
+    body.index = indexValue as number
+  }
+  const statusValue = parsed['status']
+  if (statusValue === null) {
+    body.status = ''
+  } else if (statusValue !== undefined) {
+    body.status = statusValue as string
+  }
+  const answerValue = parsed['answer']
+  if (answerValue === null) {
+    body.answer = null
+  } else if (answerValue !== undefined) {
+    body.answer = answerValue as string
+  }
+  return body
+}
+
+function readOnboardingState(parsed: Record<string, Object>): OnboardingState {
+  const body = new OnboardingState()
+  const current_step_idValue = parsed['current_step_id']
+  if (current_step_idValue === null) {
+    body.current_step_id = null
+  } else if (current_step_idValue !== undefined) {
+    body.current_step_id = current_step_idValue as string
+  }
+  const current_indexValue = parsed['current_index']
+  if (current_indexValue === null) {
+    body.current_index = 0
+  } else if (current_indexValue !== undefined) {
+    body.current_index = current_indexValue as number
+  }
+  const completedValue = parsed['completed']
+  if (completedValue === null) {
+    body.completed = false
+  } else if (completedValue !== undefined) {
+    body.completed = completedValue as boolean
+  }
+  const nicknameValue = parsed['nickname']
+  if (nicknameValue === null) {
+    body.nickname = null
+  } else if (nicknameValue !== undefined) {
+    body.nickname = nicknameValue as string
+  }
+  body.steps = readOnboardingStepStateArray(parsed['steps'])
+  const accountValue = parsed['account']
+  if (accountValue !== undefined && accountValue !== null) {
+    body.account = readAccountSummary(accountValue as Record<string, Object>)
+  }
+  const next_stepValue = parsed['next_step']
+  if (next_stepValue === null) {
+    body.next_step = ''
+  } else if (next_stepValue !== undefined) {
+    body.next_step = next_stepValue as string
+  }
+  return body
+}
+
+function readOnboardingWriteRequest(parsed: Record<string, Object>): OnboardingWriteRequest {
+  const body = new OnboardingWriteRequest()
+  const step_idValue = parsed['step_id']
+  if (step_idValue === null) {
+    body.step_id = ''
+  } else if (step_idValue !== undefined) {
+    body.step_id = step_idValue as string
+  }
+  const nicknameValue = parsed['nickname']
+  if (nicknameValue === null) {
+    body.nickname = ''
+  } else if (nicknameValue !== undefined) {
+    body.nickname = nicknameValue as string
+  }
+  const answerValue = parsed['answer']
+  if (answerValue === null) {
+    body.answer = ''
+  } else if (answerValue !== undefined) {
+    body.answer = answerValue as string
+  }
+  return body
+}
+
+function readErrorBody(parsed: Record<string, Object>): ErrorBody {
+  const body = new ErrorBody()
+  const errorValue = parsed['error']
+  if (errorValue !== undefined && errorValue !== null) {
+    body.error = readErrorBodyError(errorValue as Record<string, Object>)
+  }
+  const request_idValue = parsed['request_id']
+  if (request_idValue === null) {
+    body.request_id = ''
+  } else if (request_idValue !== undefined) {
+    body.request_id = request_idValue as string
+  }
+  return body
+}
+
+function readErrorBodyError(parsed: Record<string, Object>): ErrorBodyError {
+  const body = new ErrorBodyError()
+  const codeValue = parsed['code']
+  if (codeValue === null) {
+    body.code = ''
+  } else if (codeValue !== undefined) {
+    body.code = codeValue as string
+  }
+  const messageValue = parsed['message']
+  if (messageValue === null) {
+    body.message = ''
+  } else if (messageValue !== undefined) {
+    body.message = messageValue as string
+  }
+  body.details = readJSONText(parsed['details'])
+  return body
+}
+
+function readOnboardingStepStateArray(value: Object | undefined): Array<OnboardingStepState> {
+  const out = new Array<OnboardingStepState>()
+  if (value === undefined || value === null) {
+    return out
+  }
+  const items = value as Array<Record<string, Object>>
+  for (let index = 0; index < items.length; index++) {
+    out.push(readOnboardingStepState(items[index]))
+  }
+  return out
 }
 
 function readStringMap(value: Object | undefined): Record<string, string> | null {
@@ -103,4 +881,11 @@ function readStringMap(value: Object | undefined): Record<string, string> | null
     return null
   }
   return value as Record<string, string>
+}
+
+function readJSONText(value: Object | undefined): string {
+  if (value === undefined || value === null) {
+    return ''
+  }
+  return JSON.stringify(value)
 }
