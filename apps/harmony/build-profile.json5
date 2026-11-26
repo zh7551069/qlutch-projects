@@ -8,7 +8,29 @@
         "targetSdkVersion": "26.0.0",
         "runtimeOS": "HarmonyOS",
         "bundleName": "dev.qlutch.app",
-        "bundleType": "app"
+        "bundleType": "app",
+        "buildOption": {
+          "arkOptions": {
+            "buildProfileFields": {
+              "API_BASE_URL": "http://127.0.0.1:4710"
+            }
+          }
+        }
+      },
+      {
+        "name": "e1",
+        "compatibleSdkVersion": "26.0.0",
+        "targetSdkVersion": "26.0.0",
+        "runtimeOS": "HarmonyOS",
+        "bundleName": "dev.qlutch.app",
+        "bundleType": "app",
+        "buildOption": {
+          "arkOptions": {
+            "buildProfileFields": {
+              "API_BASE_URL": "http://47.93.180.37"
+            }
+          }
+        }
       }
     ],
     "buildModeSet": [
@@ -28,7 +50,8 @@
         {
           "name": "default",
           "applyToProducts": [
-            "default"
+            "default",
+            "e1"
           ]
         }
       ]

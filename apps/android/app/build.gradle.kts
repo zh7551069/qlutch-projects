@@ -3,6 +3,9 @@ plugins {
     alias(libs.plugins.compose.compiler)
 }
 
+val e1Api = providers.gradleProperty("qlutch.e1.api").orNull == "true"
+val apiBaseUrl = if (e1Api) "http://47.93.180.37" else "http://10.0.2.2:4710"
+
 androidComponents {
     // AGP 9 registers Compose Preview tasks for every variant. Release unit tests
     // are off unless this is set, and the Kotlin script sees enableUnitTest as a
@@ -26,6 +29,8 @@ android {
         // Earlier preview packages already shipped as 0.0.0 (1) through (6). Keep the name and step the code.
         versionCode = 7
         versionName = "0.0.0"
+        buildConfigField("boolean", "QLUTCH_E1_API", e1Api.toString())
+        buildConfigField("String", "API_BASE_URL", "\"$apiBaseUrl\"")
     }
 
     buildTypes {
@@ -36,6 +41,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     androidResources {

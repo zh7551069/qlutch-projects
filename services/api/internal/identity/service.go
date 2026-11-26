@@ -49,6 +49,10 @@ type Options struct {
 	IdempotencyTTL   time.Duration
 	NicknameMaxRunes int
 	AnswerMaxBytes   int
+	// RetainCode keeps the current code in process memory for a staging reveal
+	// route. Production and every other environment leave it false. The code
+	// is still not written to logs or to the learner send response.
+	RetainCode bool
 }
 
 // Service is the learner identity API.
@@ -66,6 +70,7 @@ type Service struct {
 	sendIP      *bucket
 	verifyPhone *bucket
 	verifyIP    *bucket
+	retainCode  bool
 }
 
 type limits struct {
@@ -99,6 +104,7 @@ type otpRecord struct {
 	Hash     []byte
 	Expires  time.Time
 	Attempts int
+	plain    []byte
 }
 
 type session struct {
@@ -202,6 +208,7 @@ func New(opts Options) (*Service, error) {
 		sendIP:      newBucket(),
 		verifyPhone: newBucket(),
 		verifyIP:    newBucket(),
+		retainCode:  opts.RetainCode,
 	}, nil
 }
 
@@ -279,10 +286,16 @@ func (s *Service) Send(ctx context.Context, key string, raw []byte, remote strin
 		return Result{Err: codeErr("INTERNAL")}
 	}
 	now := s.clock.Now()
-	s.otps[otpKey(phoneKey, body.Purpose)] = &otpRecord{
+	record := &otpRecord{
 		Hash:    s.hashCode(phoneKey, body.Purpose, code),
 		Expires: now.Add(s.cfg.otpTTL),
 	}
+	if s.retainCode {
+		record.plain = append([]byte(nil), code...)
+	}
+	otpID := otpKey(phoneKey, body.Purpose)
+	s.dropOTP(otpID)
+	s.otps[otpID] = record
 	s.mark(s.sendPhone, phoneKey, s.cfg.sendWindow)
 	s.mark(s.sendIP, ip, s.cfg.sendWindow)
 	s.sendPhone.ready[phoneKey] = now.Add(s.cfg.sendCooldown)
@@ -323,10 +336,11 @@ func (s *Service) Verify(ctx context.Context, raw []byte, remote string) Result 
 	}
 	s.mark(s.verifyPhone, phoneKey, s.cfg.verifyWindow)
 	s.mark(s.verifyIP, ip, s.cfg.verifyWindow)
-	record := s.otps[otpKey(phoneKey, body.Purpose)]
+	otpID := otpKey(phoneKey, body.Purpose)
+	record := s.otps[otpID]
 	now := s.clock.Now()
 	if record == nil || !now.Before(record.Expires) {
-		delete(s.otps, otpKey(phoneKey, body.Purpose))
+		s.dropOTP(otpID)
 		return Result{Err: codeErr("AUTH_OTP_EXPIRED")}
 	}
 	if record.Attempts >= s.cfg.otpMaxAttempts {
@@ -389,8 +403,44 @@ func (s *Service) commitVerify(ctx context.Context, body otpVerifyBody, phoneKey
 		}
 		return Result{Err: codeErr("INTERNAL")}
 	}
-	delete(s.otps, otpKey(phoneKey, body.Purpose))
+	s.dropOTP(otpKey(phoneKey, body.Purpose))
 	return issued
+}
+
+// dropOTP removes a challenge and zeroes any retained plaintext. The caller holds s.mu.
+func (s *Service) dropOTP(key string) {
+	if rec := s.otps[key]; rec != nil && len(rec.plain) > 0 {
+		clear(rec.plain)
+	}
+	delete(s.otps, key)
+}
+
+// revealCode returns the current code when this process was started with RetainCode.
+// It does not log the code and does not remove the challenge.
+func (s *Service) revealCode(raw []byte) (string, bool) {
+	if s == nil || !s.retainCode {
+		return "", false
+	}
+	var body otpSendBody
+	if decodeObject(raw, &body) != nil {
+		return "", false
+	}
+	if validateContact(body.Region, body.Phone, body.Purpose, body.Locale) != nil {
+		return "", false
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	otpID := otpKey(phoneKey(body.Region, body.Phone), body.Purpose)
+	record := s.otps[otpID]
+	if record == nil || !s.clock.Now().Before(record.Expires) {
+		s.dropOTP(otpID)
+		return "", false
+	}
+	code := string(record.plain)
+	if !otpPattern.MatchString(code) {
+		return "", false
+	}
+	return code, true
 }
 
 // Refresh rotates a refresh token. It does not read the access token.

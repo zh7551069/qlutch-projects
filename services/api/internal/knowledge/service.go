@@ -9,6 +9,7 @@ import (
 	"errors"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/zh7551069/qlutch-projects/services/airuntime"
@@ -31,15 +32,16 @@ type Options struct {
 
 // Service is the learner knowledge API.
 type Service struct {
-	mu       sync.Mutex
-	identity *identity.Service
-	store    Store
-	blobs    Blobs
-	queue    Enqueuer
-	now      func() time.Time
-	maxBytes int64
-	idemTTL  time.Duration
-	runtime  *airuntime.Runtime
+	mu                sync.Mutex
+	identity          *identity.Service
+	store             Store
+	blobs             Blobs
+	queue             Enqueuer
+	now               func() time.Time
+	maxBytes          int64
+	idemTTL           time.Duration
+	runtime           *airuntime.Runtime
+	stagingImportFail atomic.Bool
 }
 
 // New builds a knowledge service. Identity is required.
