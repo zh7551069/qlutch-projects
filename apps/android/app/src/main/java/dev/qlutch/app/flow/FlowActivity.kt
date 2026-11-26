@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
@@ -180,7 +181,10 @@ private fun NewUserFlow(
 
     fun back() {
         toast = false
-        if (place.route == FlowRoute.WAIT) resetWaitSession()
+        if (place.route == FlowRoute.WAIT) {
+            resetWaitSession()
+            error = ""
+        }
         if (backStack.isEmpty()) {
             onLeave()
         } else {
@@ -370,6 +374,17 @@ private fun NewUserFlow(
                             },
                         )
                     }
+                }
+            }
+            if (sheet.isEmpty()) {
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .windowInsetsPadding(WindowInsets.ime)
+                        .padding(bottom = 75.dp),
+                    contentAlignment = Alignment.BottomCenter,
+                ) {
+                    ClosedToast(toast)
                 }
             }
         },
@@ -606,7 +621,6 @@ private fun NewUserFlow(
                 onMore = { push(FlowPlace(FlowRoute.MORE, stepIndex = 7)) },
             )
             FlowRoute.MORE -> MoreScreen(
-                toast = toast,
                 onBack = { back() },
                 onUpload = { bytes, type, name ->
                     submitMaterial("file", type, bytes, name, FlowRoute.MORE)
@@ -641,20 +655,11 @@ private fun NewUserFlow(
                 busy = busy,
                 onBack = { back() },
                 onPoll = { api.getJob(bearer, jobId) },
-                onStatus = { status, failureCode, retryable ->
-                    if (place.route != FlowRoute.WAIT) return@WaitScreen
-                    if (FlowLogic.waitReleasesHome(status)) {
-                        openHome()
-                    } else if (FlowLogic.waitAllowsRetry(status, retryable)) {
-                        error = failureCode?.takeIf { it.isNotBlank() } ?: status
-                    } else if (status == FlowLogic.JOB_FAILED_TERMINAL) {
-                        error = failureCode?.takeIf { it.isNotBlank() } ?: status
-                    } else {
-                        error = ""
-                    }
+                onReady = {
+                    if (place.route == FlowRoute.WAIT) openHome()
                 },
                 onPollError = { code ->
-                    if (place.route == FlowRoute.WAIT) error = code
+                    if (place.route == FlowRoute.WAIT) error = FlowLogic.sourcePageError(code)
                 },
                 onRetry = { retryImport() },
             )
@@ -1166,8 +1171,9 @@ private fun PackScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             FooterNote("教材不用于训练模型")
-            if (error.isNotEmpty()) {
-                Text(error, style = qlutchText(13, QlutchTone.footer, WelcomeType.notoRegular, FontWeight.Normal))
+            val packError = FlowLogic.sourcePageError(error)
+            if (packError.isNotEmpty()) {
+                Text(packError, style = qlutchText(13, QlutchTone.footer, WelcomeType.notoRegular, FontWeight.Normal))
             }
             PrimaryButton("拍照", enabled = !busy) {
                 val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
@@ -1180,7 +1186,6 @@ private fun PackScreen(
 
 @Composable
 private fun MoreScreen(
-    toast: Boolean,
     error: String,
     busy: Boolean,
     onBack: () -> Unit,
@@ -1196,8 +1201,7 @@ private fun MoreScreen(
         val type = context.contentResolver.getType(uri) ?: "application/octet-stream"
         onUpload(bytes, type, null)
     }
-    Box(Modifier.fillMaxSize()) {
-        Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
+    Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
             FlowTopBar(7, onBack)
             PromptRow("用其他方式导入", "把教材或课件交进来")
             Column(
@@ -1232,15 +1236,12 @@ private fun MoreScreen(
                 Modifier.padding(start = 16.dp, end = 16.dp, bottom = 34.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                if (error.isNotEmpty()) {
-                    Text(error, style = qlutchText(13, QlutchTone.footer, WelcomeType.notoRegular, FontWeight.Normal))
+                val shown = FlowLogic.sourcePageError(error)
+                if (shown.isNotEmpty()) {
+                    Text(shown, style = qlutchText(13, QlutchTone.footer, WelcomeType.notoRegular, FontWeight.Normal))
                 }
                 SecondaryButton("我没有材料", enabled = !busy, onClick = onNoMaterial)
             }
-        }
-        Box(Modifier.fillMaxSize().padding(bottom = 75.dp), contentAlignment = Alignment.BottomCenter) {
-            ClosedToast(toast)
-        }
     }
 }
 
@@ -1263,8 +1264,9 @@ private fun PasteScreen(
             Modifier.padding(start = 16.dp, end = 16.dp, bottom = 34.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            if (error.isNotEmpty()) {
-                Text(error, style = qlutchText(13, QlutchTone.footer, WelcomeType.notoRegular, FontWeight.Normal))
+            val shown = FlowLogic.sourcePageError(error)
+            if (shown.isNotEmpty()) {
+                Text(shown, style = qlutchText(13, QlutchTone.footer, WelcomeType.notoRegular, FontWeight.Normal))
             }
             PrimaryButton("继续", enabled = FlowLogic.notesContinueEnabled(notes) && !busy, onClick = onContinue)
         }
@@ -1279,11 +1281,13 @@ private fun WaitScreen(
     busy: Boolean,
     onBack: () -> Unit,
     onPoll: () -> ApiOutcome<dev.qlutch.contract.KnowledgeJob>,
-    onStatus: (String, String?, Boolean) -> Unit,
+    onReady: () -> Unit,
     onPollError: (String) -> Unit,
     onRetry: () -> Unit,
 ) {
-    var retryable by remember(generation) { mutableStateOf(false) }
+    var failed by remember(jobId, generation) { mutableStateOf(false) }
+    var failureMessage by remember(jobId, generation) { mutableStateOf("") }
+    var retryable by remember(jobId, generation) { mutableStateOf(false) }
     LaunchedEffect(jobId, generation) {
         if (jobId.isEmpty()) return@LaunchedEffect
         while (isActive) {
@@ -1291,12 +1295,22 @@ private fun WaitScreen(
             if (!isActive) return@LaunchedEffect
             when (outcome) {
                 is ApiOutcome.Ok -> {
-                    retryable = FlowLogic.waitAllowsRetry(outcome.value.status, outcome.value.retryable)
-                    onStatus(outcome.value.status, outcome.value.failure_code, outcome.value.retryable)
                     val status = outcome.value.status
-                    if (FlowLogic.waitReleasesHome(status) || status == FlowLogic.JOB_FAILED_RETRYABLE || status == FlowLogic.JOB_FAILED_TERMINAL) {
+                    val allow = FlowLogic.waitAllowsRetry(status, outcome.value.retryable)
+                    val message = FlowLogic.waitFailureMessage(status, outcome.value.failure_message)
+                    if (FlowLogic.waitReleasesHome(status)) {
+                        onReady()
                         return@LaunchedEffect
                     }
+                    if (FlowLogic.waitFailed(status)) {
+                        failed = true
+                        failureMessage = message
+                        retryable = allow
+                        return@LaunchedEffect
+                    }
+                    failed = false
+                    failureMessage = ""
+                    retryable = false
                 }
                 is ApiOutcome.Err -> onPollError(outcome.code)
                 is ApiOutcome.Transport -> onPollError(outcome.reason)
@@ -1304,41 +1318,55 @@ private fun WaitScreen(
             delay(FlowLogic.JOB_POLL_INTERVAL_MILLIS)
         }
     }
+    val shownError = FlowLogic.sourcePageError(error)
     Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
         FlowTopBar(7, onBack)
-        PromptRow(FlowLogic.WAIT_TITLE, FlowLogic.WAIT_CAPTION)
-        Column(
-            Modifier
-                .weight(1f)
-                .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(20.dp, Alignment.CenterVertically),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Box(
-                Modifier
-                    .width(358.dp)
-                    .height(626.dp)
-                    .clip(RoundedCornerShape(0.dp)),
+        if (failed) {
+            PromptRow(FlowLogic.WAIT_FAIL_TITLE, failureMessage)
+            Spacer(Modifier.weight(1f))
+            Column(
+                Modifier.padding(start = 16.dp, end = 16.dp, bottom = 34.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Image(
-                    painter = painterResource(R.drawable.flow_reading_still),
-                    contentDescription = null,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Fit,
+                if (shownError.isNotEmpty()) {
+                    Text(shownError, style = qlutchText(13, QlutchTone.footer, WelcomeType.notoRegular, FontWeight.Normal))
+                }
+                if (retryable) {
+                    SecondaryButton("再试一次", enabled = !busy, onClick = onRetry)
+                }
+            }
+        } else {
+            PromptRow(FlowLogic.WAIT_TITLE, FlowLogic.WAIT_CAPTION)
+            Column(
+                Modifier
+                    .weight(1f)
+                    .padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(20.dp, Alignment.CenterVertically),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Box(
+                    Modifier
+                        .width(358.dp)
+                        .height(626.dp)
+                        .clip(RoundedCornerShape(0.dp)),
+                ) {
+                    Image(
+                        painter = painterResource(R.drawable.flow_reading_still),
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Fit,
+                    )
+                    ReadingGif(Modifier.fillMaxSize())
+                }
+                Text(
+                    FlowLogic.WAIT_FOOTNOTE,
+                    modifier = Modifier.width(358.dp),
+                    style = qlutchText(16, QlutchTone.slate, WelcomeType.notoSemiBold, FontWeight.SemiBold, lineSp = 22),
                 )
-                ReadingGif(Modifier.fillMaxSize())
-            }
-            Text(
-                FlowLogic.WAIT_FOOTNOTE,
-                modifier = Modifier.width(358.dp),
-                style = qlutchText(16, QlutchTone.slate, WelcomeType.notoSemiBold, FontWeight.SemiBold, lineSp = 22),
-            )
-            WaitMeter(FlowLogic.waitMeterFraction())
-            if (error.isNotEmpty()) {
-                Text(error, style = qlutchText(13, QlutchTone.footer, WelcomeType.notoRegular, FontWeight.Normal))
-            }
-            if (retryable) {
-                SecondaryButton("再试一次", enabled = !busy, onClick = onRetry)
+                WaitMeter(FlowLogic.waitMeterFraction())
+                if (shownError.isNotEmpty()) {
+                    Text(shownError, style = qlutchText(13, QlutchTone.footer, WelcomeType.notoRegular, FontWeight.Normal))
+                }
             }
         }
     }

@@ -51,6 +51,9 @@ export class FlowLogic {
   static readonly waitTitle: string = '正在挖掘知识点'
   static readonly waitCaption: string = '生成知识地图需要一点时间，完成后才会进入首页'
   static readonly waitFootnote: string = '请先在这一页等完，不能提前进入首页'
+  static readonly waitFailTitle: string = '挖掘没有完成'
+  static readonly waitFailRetryable: string = '地图暂时没有生成，可以用同一份材料再试一次'
+  static readonly waitFailTerminal: string = '这份材料已经无法读取，请重新上传'
 
   static regions(): RegionChoice[] {
     const mainland = new RegionChoice()
@@ -213,6 +216,35 @@ export class FlowLogic {
 
   static waitAllowsRetry(status: string, retryable: boolean): boolean {
     return status === FlowLogic.jobFailedRetryable && retryable
+  }
+
+  static waitFailed(status: string): boolean {
+    return status === FlowLogic.jobFailedRetryable || status === FlowLogic.jobFailedTerminal
+  }
+
+  static isRawJobStatus(value: string): boolean {
+    return value === FlowLogic.jobAccepted || value === FlowLogic.jobRunning || value === FlowLogic.jobMapReady ||
+      value === FlowLogic.jobFailedRetryable || value === FlowLogic.jobFailedTerminal
+  }
+
+  /** Paste, upload, and the other source pages must not render a job status enum. */
+  static sourcePageError(raw: string): string {
+    return FlowLogic.isRawJobStatus(raw.trim()) ? '' : raw
+  }
+
+  /** Sentence shown on the wait page after a failed job. Uses failure_message when present. Never the status enum. */
+  static waitFailureMessage(status: string, failureMessage: string): string {
+    const message = failureMessage.trim()
+    if (message.length > 0 && !FlowLogic.isRawJobStatus(message)) {
+      return message
+    }
+    if (status === FlowLogic.jobFailedRetryable) {
+      return FlowLogic.waitFailRetryable
+    }
+    if (status === FlowLogic.jobFailedTerminal) {
+      return FlowLogic.waitFailTerminal
+    }
+    return ''
   }
 
   static waitMeterFraction(): number {

@@ -209,6 +209,92 @@ struct OtpCells: View {
                     .overlay(RoundedRectangle(cornerRadius: 12).stroke(focused ? QlutchTone.focus : QlutchTone.line, lineWidth: focused ? 2 : 1))
             }
         }
+        .accessibilityHidden(true)
+    }
+}
+
+/// Clear field laid over the six cells. Register and login share it.
+/// It becomes first responder when the page appears, and cell taps land on it.
+struct OtpCaptureField: UIViewRepresentable {
+    @Binding var code: String
+    var focused: Bool
+
+    func makeUIView(context: Context) -> OtpTextField {
+        let field = OtpTextField()
+        field.keyboardType = .numberPad
+        field.textContentType = .oneTimeCode
+        field.textColor = .clear
+        field.tintColor = .clear
+        field.backgroundColor = .clear
+        field.autocorrectionType = .no
+        field.spellCheckingType = .no
+        field.borderStyle = .none
+        field.accessibilityLabel = "验证码"
+        field.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        field.setContentHuggingPriority(.defaultLow, for: .vertical)
+        field.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        field.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
+        field.delegate = context.coordinator
+        field.onDigits = { digits in
+            if context.coordinator.code.wrappedValue != digits {
+                context.coordinator.code.wrappedValue = digits
+            }
+        }
+        return field
+    }
+
+    func updateUIView(_ field: OtpTextField, context: Context) {
+        context.coordinator.code = $code
+        field.wantsFocus = focused
+        let next = String(FlowLogic.phoneDigits(code).prefix(6))
+        field.suppress = true
+        if field.text != next { field.text = next }
+        field.suppress = false
+        if focused && field.window != nil && !field.isFirstResponder {
+            field.becomeFirstResponder()
+        }
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator(code: $code) }
+
+    final class Coordinator: NSObject, UITextFieldDelegate {
+        var code: Binding<String>
+
+        init(code: Binding<String>) { self.code = code }
+
+        func textField(_ textField: UITextField, shouldChangeCharactersIn range: NSRange, replacementString string: String) -> Bool {
+            let current = textField.text ?? ""
+            guard let textRange = Range(range, in: current) else { return false }
+            textField.text = current.replacingCharacters(in: textRange, with: string)
+            return false
+        }
+    }
+}
+
+final class OtpTextField: UITextField {
+    var onDigits: ((String) -> Void)?
+    var suppress = false
+    var wantsFocus = false
+    private var writing = false
+
+    override var text: String? {
+        get { super.text }
+        set {
+            if writing { return }
+            writing = true
+            let digits = String(FlowLogic.phoneDigits(newValue ?? "").prefix(6))
+            let changed = super.text != digits
+            super.text = digits
+            writing = false
+            if changed && !suppress { onDigits?(digits) }
+        }
+    }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        if wantsFocus && window != nil && !isFirstResponder {
+            becomeFirstResponder()
+        }
     }
 }
 

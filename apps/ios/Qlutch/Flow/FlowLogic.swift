@@ -65,6 +65,9 @@ enum FlowLogic {
     static let waitTitle = "正在挖掘知识点"
     static let waitCaption = "生成知识地图需要一点时间，完成后才会进入首页"
     static let waitFootnote = "请先在这一页等完，不能提前进入首页"
+    static let waitFailTitle = "挖掘没有完成"
+    static let waitFailRetryable = "地图暂时没有生成，可以用同一份材料再试一次"
+    static let waitFailTerminal = "这份材料已经无法读取，请重新上传"
 
     static let regions = [
         RegionChoice(name: "中国大陆", code: regionMainland),
@@ -184,6 +187,29 @@ enum FlowLogic {
 
     static func waitAllowsRetry(_ status: String, retryable: Bool) -> Bool {
         status == jobFailedRetryable && retryable
+    }
+
+    static func waitFailed(_ status: String) -> Bool {
+        status == jobFailedRetryable || status == jobFailedTerminal
+    }
+
+    static func isRawJobStatus(_ value: String) -> Bool {
+        value == jobAccepted || value == jobRunning || value == jobMapReady ||
+            value == jobFailedRetryable || value == jobFailedTerminal
+    }
+
+    /// Paste, upload, and the other source pages must not render a job status enum.
+    static func sourcePageError(_ raw: String) -> String {
+        isRawJobStatus(raw.trimmingCharacters(in: .whitespacesAndNewlines)) ? "" : raw
+    }
+
+    /// Sentence shown on the wait page after a failed job. Uses failure_message when present. Never the status enum.
+    static func waitFailureMessage(_ status: String, failureMessage: String?) -> String {
+        let message = failureMessage?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !message.isEmpty && !isRawJobStatus(message) { return message }
+        if status == jobFailedRetryable { return waitFailRetryable }
+        if status == jobFailedTerminal { return waitFailTerminal }
+        return ""
     }
 
     static func waitMeterFraction() -> Double { waitMeterHold / waitMeterTrack }

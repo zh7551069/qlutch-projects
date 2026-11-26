@@ -49,6 +49,8 @@ export struct FlowHost {
   @State packId: string = ''
   @State materialId: string = ''
   @State waitRetryable: boolean = false
+  @State waitFailed: boolean = false
+  @State waitMessage: string = ''
   private pollTimer: number = -1
   private phoneController: TextInputController = new TextInputController()
   private phoneCaretPending: number = -1
@@ -525,8 +527,8 @@ export struct FlowHost {
       }
       .margin({ top: 24 })
       Blank().layoutWeight(1)
-      if (this.errorText.length > 0) {
-        Text(this.errorText)
+      if (FlowLogic.sourcePageError(this.errorText).length > 0) {
+        Text(FlowLogic.sourcePageError(this.errorText))
           .fontSize(13)
           .fontColor('#7C848F')
           .margin({ bottom: 8 })
@@ -558,6 +560,12 @@ export struct FlowHost {
         .border({ width: 1, color: '#E1E8F0' })
         .onChange((value: string) => { this.notes = value })
       Blank().layoutWeight(1)
+      if (FlowLogic.sourcePageError(this.errorText).length > 0) {
+        Text(FlowLogic.sourcePageError(this.errorText))
+          .fontSize(13)
+          .fontColor('#7C848F')
+          .margin({ bottom: 8 })
+      }
       PrimaryButton({
         label: '继续',
         enabled: FlowLogic.notesContinueEnabled(this.notes),
@@ -576,52 +584,63 @@ export struct FlowHost {
   waitPage() {
     Column() {
       this.top(7)
-      this.prompt(FlowLogic.waitTitle, FlowLogic.waitCaption)
-      Blank().layoutWeight(1)
-      Stack() {
-        Image($rawfile('reading_still.png'))
-          .width(358)
-          .height(626)
-          .objectFit(ImageFit.Contain)
-        Image($rawfile('reading_2s.gif'))
-          .width(358)
-          .height(626)
-          .objectFit(ImageFit.Contain)
-          .opacity(this.waitEntry >= 0 ? 1 : 1)
-      }
-      .width(358)
-      .height(626)
-      Text(FlowLogic.waitFootnote)
+      if (this.waitFailed) {
+        this.prompt(FlowLogic.waitFailTitle, this.waitMessage)
+        Blank().layoutWeight(1)
+        if (FlowLogic.sourcePageError(this.errorText).length > 0) {
+          Text(FlowLogic.sourcePageError(this.errorText))
+            .fontSize(13)
+            .fontColor('#7C848F')
+            .margin({ bottom: 12 })
+        }
+        if (this.waitRetryable) {
+          SecondaryButton({
+            label: '再试一次',
+            enabled: !this.busy,
+            onTap: () => { this.retryImport() }
+          })
+            .width(358)
+            .margin({ bottom: 34 })
+        }
+      } else {
+        this.prompt(FlowLogic.waitTitle, FlowLogic.waitCaption)
+        Blank().layoutWeight(1)
+        Stack() {
+          Image($rawfile('reading_still.png'))
+            .width(358)
+            .height(626)
+            .objectFit(ImageFit.Contain)
+          Image($rawfile('reading_2s.gif'))
+            .width(358)
+            .height(626)
+            .objectFit(ImageFit.Contain)
+            .opacity(this.waitEntry >= 0 ? 1 : 1)
+        }
         .width(358)
-        .fontSize(16)
-        .fontFamily('NotoSansSC-SemiBold')
-        .fontColor('#64748B')
-        .textAlign(TextAlign.Center)
-        .margin({ top: 20 })
-      Stack({ alignContent: Alignment.Start }) {
-        Row().width(248).height(8).borderRadius(100).backgroundColor('#E1E8F0')
-        Row().width(FlowLogic.waitMeterHold).height(8).borderRadius(100)
-          .linearGradient({ angle: 90, colors: [['#6C5CE7', 0], ['#D244EE', 1]] })
-      }
-      .width(248)
-      .height(8)
-      .margin({ top: 20 })
-      if (this.errorText.length > 0) {
-        Text(this.errorText)
-          .fontSize(13)
-          .fontColor('#7C848F')
-          .margin({ top: 12 })
-      }
-      if (this.waitRetryable) {
-        SecondaryButton({
-          label: '再试一次',
-          enabled: !this.busy,
-          onTap: () => { this.retryImport() }
-        })
+        .height(626)
+        Text(FlowLogic.waitFootnote)
           .width(358)
-          .margin({ top: 12 })
+          .fontSize(16)
+          .fontFamily('NotoSansSC-SemiBold')
+          .fontColor('#64748B')
+          .textAlign(TextAlign.Center)
+          .margin({ top: 20 })
+        Stack({ alignContent: Alignment.Start }) {
+          Row().width(248).height(8).borderRadius(100).backgroundColor('#E1E8F0')
+          Row().width(FlowLogic.waitMeterHold).height(8).borderRadius(100)
+            .linearGradient({ angle: 90, colors: [['#6C5CE7', 0], ['#D244EE', 1]] })
+        }
+        .width(248)
+        .height(8)
+        .margin({ top: 20 })
+        if (FlowLogic.sourcePageError(this.errorText).length > 0) {
+          Text(FlowLogic.sourcePageError(this.errorText))
+            .fontSize(13)
+            .fontColor('#7C848F')
+            .margin({ top: 12 })
+        }
+        Blank().layoutWeight(1)
       }
-      Blank().layoutWeight(1)
     }
     .width('100%')
     .height('100%')
@@ -773,6 +792,7 @@ export struct FlowHost {
     this.toast = false
     if (this.route === 'wait') {
       this.resetWaitSession()
+      this.errorText = ''
     }
     if (this.stack.length === 0) {
       this.onLeave()
@@ -795,6 +815,8 @@ export struct FlowHost {
     this.stopJobPoll()
     this.waitStart = 0
     this.waitRetryable = false
+    this.waitFailed = false
+    this.waitMessage = ''
     this.jobId = ''
     this.packId = ''
     this.materialId = ''
@@ -838,18 +860,22 @@ export struct FlowHost {
         }
         const jobStatus = jsonField(raw, 'status')
         const retryable = jsonField(raw, 'retryable') === 'true'
-        this.waitRetryable = FlowLogic.waitAllowsRetry(jobStatus, retryable)
         if (FlowLogic.waitReleasesHome(jobStatus)) {
           this.stopJobPoll()
           this.onHome()
           return
         }
-        if (jobStatus === FlowLogic.jobFailedRetryable || jobStatus === FlowLogic.jobFailedTerminal) {
+        if (FlowLogic.waitFailed(jobStatus)) {
           this.stopJobPoll()
-          const code = jsonField(raw, 'failure_code')
-          this.errorText = code.length > 0 ? code : jobStatus
+          this.waitFailed = true
+          this.waitRetryable = FlowLogic.waitAllowsRetry(jobStatus, retryable)
+          this.waitMessage = FlowLogic.waitFailureMessage(jobStatus, jsonField(raw, 'failure_message'))
+          this.errorText = FlowLogic.sourcePageError(this.errorText)
           return
         }
+        this.waitFailed = false
+        this.waitRetryable = false
+        this.waitMessage = ''
         this.errorText = ''
       }).catch(() => {
         if (this.route === 'wait') {
@@ -929,6 +955,8 @@ export struct FlowHost {
         this.packId = jsonField(raw, 'pack_id')
         this.materialId = jsonField(raw, 'material_id')
         this.waitRetryable = false
+        this.waitFailed = false
+        this.waitMessage = ''
         this.errorText = ''
         this.waitEntry = this.waitEntry + 1
         this.startJobPoll()
