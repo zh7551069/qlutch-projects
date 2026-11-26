@@ -21,6 +21,29 @@ func (s *Service) SetRuntime(rt *airuntime.Runtime) {
 	s.runtime = rt
 }
 
+// SetStagingImportFail turns on the paste-note failure trigger. The worker
+// enables it only when QLUTCH_ENV is staging. It does not mark a job map_ready.
+func (s *Service) SetStagingImportFail(enabled bool) {
+	if s == nil {
+		return
+	}
+	s.stagingImportFail.Store(enabled)
+}
+
+func (s *Service) stagingImportStatus(contentType string, body []byte) (string, string, bool) {
+	if s == nil || !s.stagingImportFail.Load() || contentType != "text/plain" {
+		return "", "", false
+	}
+	switch strings.TrimSpace(string(body)) {
+	case "无法完成挖掘":
+		return statusFailedRetryable, msgRetryable, true
+	case "材料无法读取":
+		return statusFailedTerminal, msgTerminal, true
+	default:
+		return "", "", false
+	}
+}
+
 // ProcessQueued reads the import payload enqueued by acceptance.
 // The payload is a job id. Material bytes are not in the queue.
 func (s *Service) ProcessQueued(ctx context.Context, payload []byte) error {
@@ -66,6 +89,9 @@ func (s *Service) ProcessImport(ctx context.Context, jobID string) error {
 	}
 	if !found || len(body) == 0 || int64(len(body)) != mat.ByteSize {
 		return s.settleUnread(ctx, item, mat, body, true)
+	}
+	if status, message, ok := s.stagingImportStatus(mat.ContentType, body); ok {
+		return s.store.FailJob(ctx, item.ID, status, message)
 	}
 	out, err := s.runtime.RunS01(ctx, airuntime.S01Input{
 		ContentType: mat.ContentType,

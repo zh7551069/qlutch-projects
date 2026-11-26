@@ -82,7 +82,8 @@ func run(log *slog.Logger) error {
 
 	rt := airuntime.New()
 	log.Info("ai runtime", "status", rt.Status())
-	learner, err := identity.New(identity.Options{Store: store})
+	reveal := identity.NewStagingReveal(cfg.EnvName, os.Getenv("QLUTCH_STAGING_OTP_TOKEN"))
+	learner, err := identity.New(identity.Options{Store: store, RetainCode: reveal != nil})
 	if err != nil {
 		return err
 	}
@@ -102,11 +103,14 @@ func run(log *slog.Logger) error {
 		return err
 	}
 	log.Info("identity", "learner", "otp-session", "sms", "mock", "store", "postgres", "internal", string(auth.DomainInternal))
+	log.Info("staging otp reveal", "enabled", reveal != nil)
 	log.Info("knowledge", "store", "postgres", "blobs", "s3", "queue", cfg.WorkerQueue)
 
+	public := server.NewWithKnowledge(checks, learner, know)
+	public.SetStagingReveal(reveal)
 	srv := &http.Server{
 		Addr:              cfg.HTTPAddr,
-		Handler:           server.NewWithKnowledge(checks, learner, know).Handler(cfg.CORSOrigins),
+		Handler:           public.Handler(cfg.CORSOrigins),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 	errCh := make(chan error, 1)

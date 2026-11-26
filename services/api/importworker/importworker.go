@@ -17,14 +17,15 @@ import (
 // Config is how the worker process reaches the stores. Secrets stay in the
 // process environment. This struct is not serialized into logs.
 type Config struct {
-	DatabaseURL string
-	Schema      string
-	Runtime     *airuntime.Runtime
-	S3Endpoint  string
-	S3Region    string
-	S3Bucket    string
-	S3AccessKey string
-	S3Secret    string
+	DatabaseURL       string
+	Schema            string
+	Runtime           *airuntime.Runtime
+	S3Endpoint        string
+	S3Region          string
+	S3Bucket          string
+	S3AccessKey       string
+	S3Secret          string
+	StagingImportFail bool
 
 	pool  *pgxpool.Pool
 	blobs knowledge.Blobs
@@ -117,6 +118,7 @@ func Open(ctx context.Context, cfg Config) (*Processor, error) {
 		}
 		return nil, errors.New("knowledge store unavailable")
 	}
+	svc.SetStagingImportFail(cfg.StagingImportFail)
 	return &Processor{svc: svc, ident: learner, pool: pool, owned: owned}, nil
 }
 

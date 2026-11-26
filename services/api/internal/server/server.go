@@ -23,6 +23,7 @@ type Server struct {
 	know     *knowledge.Service
 	learner  http.Handler
 	internal http.Handler
+	reveal   *identity.StagingReveal
 }
 
 // New builds the public handler. A nil identity service gets an in-memory OTP service.
@@ -61,6 +62,14 @@ func newServer(checks []ready.Pinger, sessions *identity.Service, know *knowledg
 	}
 }
 
+// SetStagingReveal attaches a staging-only OTP lookup. Nil leaves the route unmounted.
+func (s *Server) SetStagingReveal(reveal *identity.StagingReveal) {
+	if s == nil {
+		return
+	}
+	s.reveal = reveal
+}
+
 // Handler is the public router.
 func (s *Server) Handler(origins []string) http.Handler {
 	mux := http.NewServeMux()
@@ -68,6 +77,7 @@ func (s *Server) Handler(origins []string) http.Handler {
 	mux.HandleFunc("GET /readyz", s.readyz)
 	identity.Mount(mux, s.ident)
 	knowledge.Mount(mux, s.know)
+	identity.MountStagingReveal(mux, s.ident, s.reveal)
 	return middleware.RequestID(middleware.Tracing(middleware.CORS(origins, mux)))
 }
 

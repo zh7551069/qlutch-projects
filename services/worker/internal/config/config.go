@@ -2,12 +2,14 @@ package config
 
 import (
 	"os"
+	"strings"
 	"time"
 )
 
 // Config is the worker process configuration. Defaults match .env.example.
 // Values are local development defaults, not production credentials.
 type Config struct {
+	EnvName     string
 	RedisAddr   string
 	QueueKey    string
 	Heartbeat   time.Duration
@@ -22,6 +24,7 @@ type Config struct {
 // Load reads environment variables and falls back to the local development values.
 func Load() Config {
 	return Config{
+		EnvName:     env("QLUTCH_ENV", "local"),
 		RedisAddr:   env("QLUTCH_REDIS_ADDR", "127.0.0.1:4714"),
 		QueueKey:    env("QLUTCH_WORKER_QUEUE", "qlutch:worker:jobs"),
 		Heartbeat:   durationEnv("QLUTCH_WORKER_HEARTBEAT", 30*time.Second),
@@ -32,6 +35,12 @@ func Load() Config {
 		S3AccessKey: env("QLUTCH_S3_ACCESS_KEY", "qlutch"),
 		S3SecretKey: env("QLUTCH_S3_SECRET_KEY", "qlutch-local-dev"),
 	}
+}
+
+// StagingImportFail is the paste-note failure trigger. It is on only when
+// the environment name is exactly staging, so other workers keep the main path.
+func (c Config) StagingImportFail() bool {
+	return strings.TrimSpace(c.EnvName) == "staging"
 }
 
 func env(key, fallback string) string {

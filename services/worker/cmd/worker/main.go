@@ -30,13 +30,14 @@ func main() {
 	airuntime.InstallFromEnv(runtime)
 	log.Info("ai runtime", "status", runtime.Status())
 	processor, err := importworker.Open(ctx, importworker.Config{
-		DatabaseURL: cfg.DatabaseURL,
-		Runtime:     runtime,
-		S3Endpoint:  cfg.S3Endpoint,
-		S3Region:    cfg.S3Region,
-		S3Bucket:    cfg.S3Bucket,
-		S3AccessKey: cfg.S3AccessKey,
-		S3Secret:    cfg.S3SecretKey,
+		DatabaseURL:       cfg.DatabaseURL,
+		Runtime:           runtime,
+		S3Endpoint:        cfg.S3Endpoint,
+		S3Region:          cfg.S3Region,
+		S3Bucket:          cfg.S3Bucket,
+		S3AccessKey:       cfg.S3AccessKey,
+		S3Secret:          cfg.S3SecretKey,
+		StagingImportFail: cfg.StagingImportFail(),
 	})
 	if err != nil {
 		log.Error("import worker", "reason", "store unavailable")
