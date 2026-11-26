@@ -99,7 +99,9 @@ struct FlowView: View {
 
     private var auth: some View {
         let login = mode == FlowLogic.purposeLogin
-        return VStack(spacing: 0) {
+        return GeometryReader { proxy in
+        ScrollView {
+        VStack(spacing: 0) {
             VStack(spacing: 0) {
                 bundledImage("wordmark_small", 111, 28).padding(.top, 48)
                 Text("把课件或教材上传给AI，挖掘知识点生成题卡，每天完成一组题卡或与好友PK抢答题卡，强化知识点记忆")
@@ -129,7 +131,7 @@ struct FlowView: View {
                 if !error.isEmpty { Text(error).font(qlutchFont("NotoSansSC-Regular", 13)).foregroundStyle(QlutchTone.footer).padding(.top, 8) }
             }
             .padding(.horizontal, 16)
-            Spacer()
+            Spacer(minLength: 0)
             VStack(spacing: 12) {
                 Text("其他方式").font(qlutchFont("NotoSansSC-Regular", 13)).foregroundStyle(QlutchTone.slate)
                 ClosedChannel(label: "使用微信登录", mark: "微") { showToast() }
@@ -141,6 +143,11 @@ struct FlowView: View {
             }
             .padding(.horizontal, 16)
             .padding(.bottom, 28)
+        }
+        .frame(width: proxy.size.width, alignment: .top)
+        .frame(minHeight: proxy.size.height, alignment: .top)
+        }
+        .scrollDismissesKeyboard(.never)
         }
     }
 

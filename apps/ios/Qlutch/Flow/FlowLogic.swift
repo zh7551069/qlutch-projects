@@ -1,5 +1,11 @@
 import Foundation
 
+struct PhoneFieldEdit: Equatable {
+    let digits: String
+    let text: String
+    let cursor: Int
+}
+
 indirect enum FlowRoute: Equatable {
     case auth
     case otp
@@ -87,17 +93,73 @@ enum FlowLogic {
     static func phoneDigits(_ raw: String) -> String { raw.filter(\.isNumber) }
 
     static func formatPhone(region: String, digits: String) -> String {
-        if region == regionMainland && digits.count == 11 {
-            let chars = Array(digits)
-            return String(chars[0..<3]) + " " + String(chars[3..<7]) + " " + String(chars[7..<11])
+        let body = phoneDigits(digits)
+        if region == regionMainland {
+            return formatMainlandPhone(body)
         }
         var parts: [String] = []
-        var rest = digits
+        var rest = body
         while !rest.isEmpty {
             parts.append(String(rest.prefix(4)))
             rest = String(rest.dropFirst(4))
         }
         return parts.joined(separator: " ")
+    }
+
+    /// +86 stays 3-4-4 for the whole entry, matching the 138 0013 8000 placeholder.
+    private static func formatMainlandPhone(_ digits: String) -> String {
+        if digits.count <= 3 { return digits }
+        let chars = Array(digits)
+        if digits.count <= 7 {
+            return String(chars[0..<3]) + " " + String(chars[3...])
+        }
+        return String(chars[0..<3]) + " " + String(chars[3..<7]) + " " + String(chars[7...])
+    }
+
+    static func digitsBeforeCursor(_ text: String, _ cursor: Int) -> Int {
+        let end = min(max(cursor, 0), text.utf16.count)
+        var count = 0
+        for (offset, unit) in text.utf16.enumerated() {
+            if offset >= end { break }
+            if unit >= 48 && unit <= 57 { count += 1 }
+        }
+        return count
+    }
+
+    /// UTF-16 offset in `formatted` just after `digitCount` digits. The full count lands after the last digit.
+    static func phoneCursor(_ formatted: String, _ digitCount: Int) -> Int {
+        if digitCount <= 0 { return 0 }
+        var seen = 0
+        for (offset, unit) in formatted.utf16.enumerated() {
+            if unit >= 48 && unit <= 57 {
+                seen += 1
+                if seen == digitCount { return offset + 1 }
+            }
+        }
+        return formatted.utf16.count
+    }
+
+    static func editPhoneField(region: String, proposedText: String, proposedCursor: Int) -> PhoneFieldEdit {
+        let digits = phoneDigits(proposedText)
+        let text = formatPhone(region: region, digits: digits)
+        let cursor = phoneCursor(text, digitsBeforeCursor(proposedText, proposedCursor))
+        return PhoneFieldEdit(digits: digits, text: text, cursor: cursor)
+    }
+
+    /// Caret in `after` after one contiguous insert, delete, or replace of `before`.
+    static func cursorAfterReplacement(before: String, after: String) -> Int {
+        let beforeUnits = Array(before.utf16)
+        let afterUnits = Array(after.utf16)
+        var prefix = 0
+        let shared = min(beforeUnits.count, afterUnits.count)
+        while prefix < shared && beforeUnits[prefix] == afterUnits[prefix] { prefix += 1 }
+        var suffix = 0
+        while suffix < beforeUnits.count - prefix &&
+            suffix < afterUnits.count - prefix &&
+            beforeUnits[beforeUnits.count - 1 - suffix] == afterUnits[afterUnits.count - 1 - suffix] {
+            suffix += 1
+        }
+        return afterUnits.count - suffix
     }
 
     static func otpContinueEnabled(_ code: String) -> Bool {

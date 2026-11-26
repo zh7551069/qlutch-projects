@@ -1,3 +1,9 @@
+export class PhoneFieldEdit {
+  digits: string = ''
+  text: string = ''
+  cursor: number = 0
+}
+
 export class FlowPlace {
   route: string = 'auth'
   step: number = 1
@@ -104,17 +110,84 @@ export class FlowLogic {
   }
 
   static formatPhone(region: string, digits: string): string {
-    if (region === FlowLogic.regionMainland && digits.length === 11) {
-      return `${digits.substring(0, 3)} ${digits.substring(3, 7)} ${digits.substring(7)}`
+    const body = FlowLogic.phoneDigits(digits)
+    if (region === FlowLogic.regionMainland) {
+      return FlowLogic.formatMainlandPhone(body)
     }
     let out = ''
-    for (let i = 0; i < digits.length; i++) {
+    for (let i = 0; i < body.length; i++) {
       if (i > 0 && i % 4 === 0) {
         out += ' '
       }
-      out += digits.charAt(i)
+      out += body.charAt(i)
     }
     return out
+  }
+
+  /** +86 stays 3-4-4 for the whole entry, matching the 138 0013 8000 placeholder. */
+  private static formatMainlandPhone(digits: string): string {
+    if (digits.length <= 3) {
+      return digits
+    }
+    if (digits.length <= 7) {
+      return `${digits.substring(0, 3)} ${digits.substring(3)}`
+    }
+    return `${digits.substring(0, 3)} ${digits.substring(3, 7)} ${digits.substring(7)}`
+  }
+
+  static digitsBeforeCursor(text: string, cursor: number): number {
+    const end = cursor < 0 ? 0 : (cursor > text.length ? text.length : cursor)
+    let count = 0
+    for (let i = 0; i < end; i++) {
+      const ch = text.charAt(i)
+      if (ch >= '0' && ch <= '9') {
+        count += 1
+      }
+    }
+    return count
+  }
+
+  /** Offset in formatted sitting just after digitCount digits. The full count lands after the last digit. */
+  static phoneCursor(formatted: string, digitCount: number): number {
+    if (digitCount <= 0) {
+      return 0
+    }
+    let seen = 0
+    for (let i = 0; i < formatted.length; i++) {
+      const ch = formatted.charAt(i)
+      if (ch >= '0' && ch <= '9') {
+        seen += 1
+        if (seen === digitCount) {
+          return i + 1
+        }
+      }
+    }
+    return formatted.length
+  }
+
+  static editPhoneField(region: string, proposedText: string, proposedCursor: number): PhoneFieldEdit {
+    const digits = FlowLogic.phoneDigits(proposedText)
+    const text = FlowLogic.formatPhone(region, digits)
+    const edit = new PhoneFieldEdit()
+    edit.digits = digits
+    edit.text = text
+    edit.cursor = FlowLogic.phoneCursor(text, FlowLogic.digitsBeforeCursor(proposedText, proposedCursor))
+    return edit
+  }
+
+  /** Caret in after after one contiguous insert, delete, or replace of before. */
+  static cursorAfterReplacement(before: string, after: string): number {
+    let prefix = 0
+    const shared = before.length < after.length ? before.length : after.length
+    while (prefix < shared && before.charAt(prefix) === after.charAt(prefix)) {
+      prefix += 1
+    }
+    let suffix = 0
+    while (suffix < before.length - prefix && suffix < after.length - prefix &&
+      before.charAt(before.length - 1 - suffix) === after.charAt(after.length - 1 - suffix)) {
+      suffix += 1
+    }
+    return after.length - suffix
   }
 
   static otpContinueEnabled(code: string): boolean {

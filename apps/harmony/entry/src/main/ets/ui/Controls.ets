@@ -208,6 +208,7 @@ export struct ClosedChannel {
     }
     .width('100%')
     .height(50)
+    .constraintSize({ minHeight: 50, maxHeight: 50 })
     .justifyContent(FlexAlign.Center)
     .backgroundColor('#FFFFFF')
     .borderRadius(25)

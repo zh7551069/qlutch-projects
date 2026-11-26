@@ -249,7 +249,7 @@ struct ClosedChannel: View {
                     .foregroundStyle(QlutchTone.ink)
             }
             .frame(maxWidth: .infinity)
-            .frame(height: 50)
+            .frame(minHeight: 50, maxHeight: 50)
             .background(QlutchTone.white)
             .clipShape(Capsule())
             .overlay(Capsule().stroke(QlutchTone.line, lineWidth: 1))
@@ -274,6 +274,80 @@ struct FlagMark: View {
     }
 }
 
+struct PhoneNumberField: UIViewRepresentable {
+    let region: String
+    @Binding var digits: String
+
+    func makeUIView(context: Context) -> UITextField {
+        let field = UITextField()
+        field.borderStyle = .none
+        field.backgroundColor = .clear
+        field.font = UIFont(name: "NotoSansSC-Regular", size: 16) ?? .systemFont(ofSize: 16)
+        field.keyboardType = .numberPad
+        field.placeholder = "138 0013 8000"
+        field.autocorrectionType = .no
+        field.spellCheckingType = .no
+        field.smartInsertDeleteType = .no
+        field.adjustsFontSizeToFitWidth = false
+        field.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        field.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        field.delegate = context.coordinator
+        field.text = FlowLogic.formatPhone(region: region, digits: digits)
+        return field
+    }
+
+    func updateUIView(_ field: UITextField, context: Context) {
+        context.coordinator.region = region
+        context.coordinator.digits = $digits
+        let formatted = FlowLogic.formatPhone(region: region, digits: digits)
+        guard field.text != formatted else { return }
+        let current = field.text ?? ""
+        let caret: Int
+        if let range = field.selectedTextRange {
+            caret = field.offset(from: field.beginningOfDocument, to: range.start)
+        } else {
+            caret = formatted.utf16.count
+        }
+        let digitCount = FlowLogic.phoneDigits(current) == digits
+            ? FlowLogic.digitsBeforeCursor(current, caret)
+            : digits.utf16.count
+        field.text = formatted
+        let offset = FlowLogic.phoneCursor(formatted, digitCount)
+        if let position = field.position(from: field.beginningOfDocument, offset: offset) {
+            field.selectedTextRange = field.textRange(from: position, to: position)
+        }
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(region: region, digits: $digits)
+    }
+
+    final class Coordinator: NSObject, UITextFieldDelegate {
+        var region: String
+        var digits: Binding<String>
+
+        init(region: String, digits: Binding<String>) {
+            self.region = region
+            self.digits = digits
+        }
+
+        func textField(_ textField: UITextField, shouldChangeCharactersIn range: NSRange, replacementString string: String) -> Bool {
+            let current = textField.text ?? ""
+            guard let textRange = Range(range, in: current) else { return false }
+            let proposed = current.replacingCharacters(in: textRange, with: string)
+            let cursor = range.location + (string as NSString).length
+            let edit = FlowLogic.editPhoneField(region: region, proposedText: proposed, proposedCursor: cursor)
+            textField.text = edit.text
+            let offset = min(edit.cursor, (textField.text ?? "").utf16.count)
+            if let position = textField.position(from: textField.beginningOfDocument, offset: offset) {
+                textField.selectedTextRange = textField.textRange(from: position, to: position)
+            }
+            digits.wrappedValue = edit.digits
+            return false
+        }
+    }
+}
+
 struct PhoneField: View {
     let region: String
     let hongKong: Bool
@@ -290,12 +364,8 @@ struct PhoneField: View {
             }
             .buttonStyle(.plain)
             Rectangle().fill(QlutchTone.line).frame(width: 1, height: 20)
-            TextField("138 0013 8000", text: Binding(
-                get: { FlowLogic.formatPhone(region: region, digits: digits) },
-                set: { digits = FlowLogic.phoneDigits($0) }
-            ))
-            .font(qlutchFont("NotoSansSC-Regular", 16))
-            .keyboardType(.numberPad)
+            PhoneNumberField(region: region, digits: $digits)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.horizontal, 16)
         .frame(height: 50)

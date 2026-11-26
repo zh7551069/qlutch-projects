@@ -46,6 +46,8 @@ class FlowLogicTest {
         assertTrue(FlowLogic.otpContinueEnabled("123456"))
         assertFalse(FlowLogic.otpContinueEnabled("12345a"))
         assertEquals("138 0013 8000", FlowLogic.formatPhone("+86", "13800138000"))
+        assertEquals("1234 5", FlowLogic.formatPhone("+852", "12345"))
+        assertEquals("1234 5678", FlowLogic.formatPhone("+852", "12345678"))
         assertTrue(FlowLogic.waitReleasesHome(FlowLogic.JOB_MAP_READY))
         assertFalse(FlowLogic.waitReleasesHome(FlowLogic.JOB_ACCEPTED))
         assertFalse(FlowLogic.waitReleasesHome(FlowLogic.JOB_RUNNING))
@@ -65,6 +67,84 @@ class FlowLogicTest {
         assertTrue(key.isNotEmpty())
         assertTrue(key.length <= 200)
         assertTrue(key.all { it.code in 32..126 })
+    }
+
+    @Test
+    fun mainlandPhoneStaysThreeFourFourAndCaretStaysAfterTheLastDigit() {
+        val expect = listOf(
+            "1",
+            "13",
+            "138",
+            "138 0",
+            "138 00",
+            "138 001",
+            "138 0013",
+            "138 0013 8",
+            "138 0013 80",
+            "138 0013 800",
+            "138 0013 8000",
+        )
+        var shown = ""
+        val typed = "13800138000"
+        for (index in typed.indices) {
+            val after = shown + typed[index]
+            val proposed = FlowLogic.cursorAfterReplacement(shown, after)
+            val edit = FlowLogic.editPhoneField(FlowLogic.REGION_MAINLAND, after, proposed)
+            assertEquals(expect[index], edit.text)
+            assertEquals(edit.text.length, edit.cursor)
+            assertEquals(typed.substring(0, index + 1), edit.digits)
+            assertFalse(edit.digits.contains(" "))
+            shown = edit.text
+        }
+    }
+
+    @Test
+    fun mainlandCaretStaysOnTheEditedDigitAcrossSpaces() {
+        val full = "138 0013 8000"
+        val withoutMiddleOne = full.removeRange(6, 7)
+        val deleted = FlowLogic.editPhoneField(
+            "+86",
+            withoutMiddleOne,
+            FlowLogic.cursorAfterReplacement(full, withoutMiddleOne),
+        )
+        assertEquals("1380038000", deleted.digits)
+        assertEquals("138 0038 000", deleted.text)
+        assertEquals(FlowLogic.phoneCursor(deleted.text, 5), deleted.cursor)
+
+        val grouped = "138 4567"
+        val withoutSpace = grouped.removeRange(3, 4)
+        val crossed = FlowLogic.editPhoneField(
+            "+86",
+            withoutSpace,
+            FlowLogic.cursorAfterReplacement(grouped, withoutSpace),
+        )
+        assertEquals("1384567", crossed.digits)
+        assertEquals("138 4567", crossed.text)
+        assertEquals(3, FlowLogic.digitsBeforeCursor(crossed.text, crossed.cursor))
+
+        val inserted = crossed.text.substring(0, crossed.cursor) + "9" + crossed.text.substring(crossed.cursor)
+        val typed = FlowLogic.editPhoneField("+86", inserted, crossed.cursor + 1)
+        assertEquals("13894567", typed.digits)
+        assertEquals("138 9456 7", typed.text)
+        assertEquals(4, FlowLogic.digitsBeforeCursor(typed.text, typed.cursor))
+        assertFalse(typed.digits.contains(" "))
+    }
+
+    @Test
+    fun authChannelsKeepFiftyDpAndScrollInsteadOfCompressing() {
+        val ui = repoFile("apps/android/app/src/main/java/dev/qlutch/app/ui/QlutchUi.kt").readText()
+        val channel = ui.substringAfter("fun ClosedChannel(").substringBefore("fun WeChatMark(")
+        assertTrue(channel.contains("requiredHeight(50.dp)"))
+        assertFalse(channel.contains(".height(50.dp)"))
+        val activity = repoFile("apps/android/app/src/main/java/dev/qlutch/app/flow/FlowActivity.kt").readText()
+        val auth = activity.substringAfter("private fun AuthScreen(").substringBefore("private fun TabChip(")
+        assertTrue(auth.contains("verticalScroll(rememberScrollState())"))
+        assertTrue(auth.contains("AuthBody("))
+        val body = activity.substringAfter("private fun AuthBody(").substringBefore("private fun AuthScreen(")
+        assertTrue(body.contains("Constraints.Infinity"))
+        assertTrue(activity.contains("使用微信登录"))
+        assertTrue(activity.contains("使用支付宝登录"))
+        assertTrue(activity.contains("FlowLogic.TOAST_CLOSED") || activity.contains("onClosed"))
     }
 
     @Test

@@ -19,6 +19,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -33,6 +34,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -48,11 +51,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
@@ -686,6 +692,36 @@ private fun Board(
     }
 }
 
+/**
+ * Keeps the register/login column at least as tall as the viewport, and taller when the
+ * keyboard leaves less room than the natural content. The 50dp channels are measured with
+ * an unbounded height, so a short viewport scrolls instead of squashing them.
+ */
+@Composable
+private fun AuthBody(
+    minHeight: Dp,
+    top: @Composable () -> Unit,
+    bottom: @Composable () -> Unit,
+) {
+    SubcomposeLayout(Modifier.fillMaxWidth()) { constraints ->
+        val width = constraints.maxWidth
+        val loose = Constraints(
+            minWidth = width,
+            maxWidth = width,
+            minHeight = 0,
+            maxHeight = Constraints.Infinity,
+        )
+        val topPlaceable = subcompose("top", top).first().measure(loose)
+        val bottomPlaceable = subcompose("bottom", bottom).first().measure(loose)
+        val gap = (minHeight.roundToPx() - topPlaceable.height - bottomPlaceable.height).coerceAtLeast(0)
+        val height = topPlaceable.height + gap + bottomPlaceable.height
+        layout(width, height) {
+            topPlaceable.place(0, 0)
+            bottomPlaceable.place(0, topPlaceable.height + gap)
+        }
+    }
+}
+
 @Composable
 private fun AuthScreen(
     mode: String,
@@ -702,7 +738,15 @@ private fun AuthScreen(
     onContinue: () -> Unit,
 ) {
     val login = mode == FlowLogic.PURPOSE_LOGIN
-    Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val viewport = maxHeight
+        Column(
+            Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState()),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            AuthBody(viewport, {
         Column(
             Modifier
                 .fillMaxWidth()
@@ -742,7 +786,7 @@ private fun AuthScreen(
             PhoneField(
                 region = region,
                 hongKong = region == FlowLogic.REGION_HONG_KONG,
-                number = FlowLogic.formatPhone(region, phone),
+                number = phone,
                 onRegion = onRegionSheet,
                 onNumber = onPhone,
             )
@@ -753,7 +797,7 @@ private fun AuthScreen(
                 Text(error, style = qlutchText(13, QlutchTone.footer, WelcomeType.notoRegular, FontWeight.Normal))
             }
         }
-        Spacer(Modifier.weight(1f))
+            }, {
         Column(
             Modifier
                 .fillMaxWidth()
@@ -766,6 +810,8 @@ private fun AuthScreen(
             ClosedChannel("使用支付宝登录", { AlipayMark() }, onClosed)
             Spacer(Modifier.height(8.dp))
             LanguageChip(if (locale == FlowLogic.LOCALE_HANT) "繁体中文" else "简体中文", onLanguageSheet)
+        }
+            })
         }
     }
 }
