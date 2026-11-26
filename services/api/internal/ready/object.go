@@ -10,6 +10,8 @@ import (
 )
 
 // ObjectStore checks an S3-compatible bucket with a signed HeadBucket request.
+// DNS endpoints use virtual-hosted style ({bucket}.{host}/). IP, localhost,
+// and single-label hosts stay path-style so local MinIO keeps working.
 type ObjectStore struct {
 	Endpoint  string
 	Region    string
@@ -29,8 +31,16 @@ func (o ObjectStore) Ping(ctx context.Context) error {
 	if err != nil || endpoint.Host == "" || o.Bucket == "" {
 		return errors.New("object storage unreachable")
 	}
-	endpoint.Path = "/" + url.PathEscape(o.Bucket)
 	endpoint.RawQuery = ""
+	endpoint.Fragment = ""
+	host, pathStyle := BucketHost(endpoint.Host, o.Bucket)
+	endpoint.Host = host
+	if pathStyle {
+		endpoint.Path = "/" + url.PathEscape(o.Bucket)
+	} else {
+		endpoint.Path = "/"
+	}
+	endpoint.RawPath = ""
 	req, err := http.NewRequestWithContext(ctx, http.MethodHead, endpoint.String(), nil)
 	if err != nil {
 		return errors.New("object storage unreachable")

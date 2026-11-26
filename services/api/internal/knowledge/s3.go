@@ -16,8 +16,11 @@ import (
 	"github.com/zh7551069/qlutch-projects/services/api/internal/ready"
 )
 
-// S3Store speaks the S3 API with query-signed PUT URLs and signed HEAD requests.
-// It does not import a cloud vendor SDK.
+// S3Store speaks the S3 API with query-signed PUT URLs and signed HEAD/GET.
+// DNS endpoints are virtual-hosted ({bucket}.{host}/{key}). IP, localhost,
+// and single-label hosts stay path-style so local MinIO keeps working.
+// It does not import a cloud vendor SDK. The configured endpoint stays the
+// regional host; the bucket is not written back into it.
 type S3Store struct {
 	Endpoint  string
 	Region    string
@@ -139,7 +142,16 @@ func (s S3Store) objectURL(objectKey string) (*url.URL, error) {
 	}
 	base.RawQuery = ""
 	base.Fragment = ""
-	base.Path = strings.TrimRight(base.EscapedPath(), "/") + "/" + awsEncode(s.Bucket, true) + "/" + escapeKey(objectKey)
+	key := escapeKey(objectKey)
+	host, pathStyle := ready.BucketHost(base.Host, s.Bucket)
+	base.Host = host
+	if pathStyle {
+		base.Path = strings.TrimRight(base.EscapedPath(), "/") + "/" + awsEncode(s.Bucket, true) + "/" + key
+	} else {
+		// Bucket lives on the host only. A second copy in the path is rejected
+		// by endpoints that forbid path-style access.
+		base.Path = "/" + key
+	}
 	base.RawPath = base.Path
 	return base, nil
 }
