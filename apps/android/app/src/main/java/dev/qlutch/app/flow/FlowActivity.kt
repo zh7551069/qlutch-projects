@@ -321,7 +321,53 @@ private fun NewUserFlow(
         }
     }
 
-    Board {
+    Board(
+        overlay = {
+            if (sheet == "region") {
+                OptionSheet(
+                    title = "选择国家或地区",
+                    searchHint = "搜索国家或区号",
+                    query = search,
+                    onQuery = { search = it },
+                    onClose = { sheet = "" },
+                ) {
+                    FlowLogic.filterRegions(search).forEach { choice ->
+                        SheetRow(
+                            title = choice.name,
+                            subtitle = choice.code,
+                            selected = choice.code == region,
+                            leading = { FlagMark(choice.code == FlowLogic.REGION_HONG_KONG, large = true) },
+                            onClick = {
+                                region = choice.code
+                                sheet = ""
+                            },
+                        )
+                    }
+                }
+            }
+            if (sheet == "language") {
+                OptionSheet(
+                    title = "选择语言",
+                    searchHint = "搜索语言",
+                    query = search,
+                    onQuery = { search = it },
+                    onClose = { sheet = "" },
+                ) {
+                    FlowLogic.filterLanguages(search).forEach { choice ->
+                        SheetRow(
+                            title = choice.label,
+                            subtitle = null,
+                            selected = choice.locale == locale,
+                            onClick = {
+                                locale = choice.locale
+                                sheet = ""
+                            },
+                        )
+                    }
+                }
+            }
+        },
+    ) {
         when (place.route) {
             FlowRoute.AUTH -> AuthScreen(
                 mode = mode,
@@ -608,49 +654,6 @@ private fun NewUserFlow(
             )
             FlowRoute.HOME -> Unit
         }
-        if (sheet == "region") {
-            OptionSheet(
-                title = "选择国家或地区",
-                searchHint = "搜索国家或区号",
-                query = search,
-                onQuery = { search = it },
-                onClose = { sheet = "" },
-            ) {
-                FlowLogic.filterRegions(search).forEach { choice ->
-                    SheetRow(
-                        title = choice.name,
-                        subtitle = choice.code,
-                        selected = choice.code == region,
-                        leading = { FlagMark(choice.code == FlowLogic.REGION_HONG_KONG, large = true) },
-                        onClick = {
-                            region = choice.code
-                            sheet = ""
-                        },
-                    )
-                }
-            }
-        }
-        if (sheet == "language") {
-            OptionSheet(
-                title = "选择语言",
-                searchHint = "搜索语言",
-                query = search,
-                onQuery = { search = it },
-                onClose = { sheet = "" },
-            ) {
-                FlowLogic.filterLanguages(search).forEach { choice ->
-                    SheetRow(
-                        title = choice.label,
-                        subtitle = null,
-                        selected = choice.locale == locale,
-                        onClick = {
-                            locale = choice.locale
-                            sheet = ""
-                        },
-                    )
-                }
-            }
-        }
     }
 }
 
@@ -659,7 +662,10 @@ private fun runOnUi(block: () -> Unit) {
 }
 
 @Composable
-private fun Board(content: @Composable () -> Unit) {
+private fun Board(
+    overlay: @Composable () -> Unit = {},
+    content: @Composable () -> Unit,
+) {
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -675,6 +681,8 @@ private fun Board(content: @Composable () -> Unit) {
         ) {
             content()
         }
+        // Cover the page. A sheet kept in the column is measured at 0 height after AuthScreen.fillMaxSize().
+        overlay()
     }
 }
 
