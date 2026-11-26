@@ -101,6 +101,24 @@ class FlowLogicTest {
         assertEquals("功能尚未开放", FlowLogic.TOAST_CLOSED)
     }
 
+    @Test
+    fun authSheetsOverlayThePageAndOnlyTouchLocalChoice() {
+        val source = repoFile("apps/android/app/src/main/java/dev/qlutch/app/flow/FlowActivity.kt").readText()
+        val overlay = source.substringAfter("overlay = {").substringBefore("when (place.route)")
+        assertTrue(overlay.contains("if (sheet == \"region\")"))
+        assertTrue(overlay.contains("if (sheet == \"language\")"))
+        assertTrue(overlay.contains("region = choice.code"))
+        assertTrue(overlay.contains("locale = choice.locale"))
+        assertTrue(overlay.contains("sheet = \"\""))
+        assertFalse(overlay.contains("api."))
+        val page = source.substringAfter("when (place.route)").substringBefore("private fun runOnUi")
+        assertFalse(page.contains("OptionSheet("))
+        val board = source.substringAfter("private fun Board(").substringBefore("private fun AuthScreen")
+        val column = board.substringAfter("Column(").substringBefore("overlay()")
+        assertTrue(column.contains("content()"))
+        assertFalse(column.contains("OptionSheet("))
+    }
+
     private fun md5(bytes: ByteArray): String {
         return MessageDigest.getInstance("MD5").digest(bytes).joinToString("") { "%02x".format(it) }
     }
