@@ -119,7 +119,22 @@ for (const rel of [
   'apps/ios/Qlutch/Flow/IdentityClient.swift',
   'apps/harmony/entry/src/main/ets/flow/IdentityApi.ets',
 ]) {
-  assert.equal(text(rel).includes('/internal/staging/otp/reveal'), false, `${rel} calls the staging reveal route`)
+  const source = text(rel)
+  assert.equal(source.includes('/internal/staging/otp/reveal'), false, `${rel} calls the staging reveal route`)
+  const lines = source.split('\n')
+  const onboarding = lines.filter((line) => line.includes('/v1/identity/onboarding'))
+  const methods = onboarding
+    .map((line) => line.match(/["'](GET|PUT|POST|PATCH|DELETE)["']/)?.[1])
+    .filter(Boolean)
+  assert.deepEqual(methods.slice().sort(), ['GET', 'PUT'], `${rel} onboarding verbs`)
+  assert.equal(onboarding.some((line) => /\bpost\s*\(/i.test(line)), false, `${rel} posts onboarding`)
+  const writeLine = lines.find((line, index) => {
+    if (!line.includes('/v1/identity/onboarding')) return false
+    return lines.slice(Math.max(0, index - 15), index).some((prev) => prev.includes('writeOnboarding'))
+  })
+  assert.equal(typeof writeLine, 'string', `${rel} writeOnboarding does not call /v1/identity/onboarding`)
+  assert.match(writeLine, /["']PUT["']/, `${rel} writeOnboarding must PUT`)
+  assert.doesNotMatch(writeLine, /["']POST["']|\bpost\s*\(/i, `${rel} writeOnboarding must not POST`)
 }
 
 console.log('client shell checks passed')

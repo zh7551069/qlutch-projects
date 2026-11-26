@@ -27,7 +27,8 @@ struct IdentityClient {
 
     func writeOnboarding(bearer: String, stepId: String, nickname: String?, answer: String?) async -> CallResult<OnboardingState> {
         let body = OnboardingWriteRequest(step_id: stepId, nickname: nickname, answer: answer)
-        return await post("/v1/identity/onboarding", body: body, key: "", bearer: bearer)
+        let data = try? JSONEncoder().encode(body)
+        return await call("PUT", "/v1/identity/onboarding", body: data, key: "", bearer: bearer)
     }
 
     func skipFirstPack(key: String, bearer: String) async -> CallResult<FirstPackSkipResponse> {
