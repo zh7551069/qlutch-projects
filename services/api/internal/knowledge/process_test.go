@@ -38,6 +38,24 @@ func TestImportAcceptanceSourceDoesNotRunS01(t *testing.T) {
 	}
 }
 
+func TestKnowledgeDoesNotCallProviderHTTP(t *testing.T) {
+	entries, err := os.ReadDir(".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".go") || strings.HasSuffix(entry.Name(), "_test.go") {
+			continue
+		}
+		body := mustRead(t, entry.Name())
+		for _, banned := range []string{"chat/completions", "multimodal-generation", "InstallFromEnv", "QLUTCH_LLM_API_KEY"} {
+			if strings.Contains(body, banned) {
+				t.Fatalf("%s contains %s", entry.Name(), banned)
+			}
+		}
+	}
+}
+
 func TestNoProviderSDKInWorkerPath(t *testing.T) {
 	entries, err := os.ReadDir(".")
 	if err != nil {
