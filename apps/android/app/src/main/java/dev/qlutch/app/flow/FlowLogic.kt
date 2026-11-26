@@ -44,6 +44,9 @@ internal object FlowLogic {
     const val WAIT_TITLE = "正在挖掘知识点"
     const val WAIT_CAPTION = "生成知识地图需要一点时间，完成后才会进入首页"
     const val WAIT_FOOTNOTE = "请先在这一页等完，不能提前进入首页"
+    const val WAIT_FAIL_TITLE = "挖掘没有完成"
+    const val WAIT_FAIL_RETRYABLE = "地图暂时没有生成，可以用同一份材料再试一次"
+    const val WAIT_FAIL_TERMINAL = "这份材料已经无法读取，请重新上传"
 
     val regions = listOf(
         RegionChoice("中国大陆", REGION_MAINLAND),
@@ -197,6 +200,35 @@ internal object FlowLogic {
     /** Retry is a new import of the same material, and only for a retryable failure. */
     fun waitAllowsRetry(status: String, retryable: Boolean): Boolean {
         return status == JOB_FAILED_RETRYABLE && retryable
+    }
+
+    fun waitFailed(status: String): Boolean {
+        return status == JOB_FAILED_RETRYABLE || status == JOB_FAILED_TERMINAL
+    }
+
+    fun isRawJobStatus(value: String): Boolean {
+        return value == JOB_ACCEPTED ||
+            value == JOB_RUNNING ||
+            value == JOB_MAP_READY ||
+            value == JOB_FAILED_RETRYABLE ||
+            value == JOB_FAILED_TERMINAL
+    }
+
+    /** Paste, upload, and the other source pages must not render a job status enum. */
+    fun sourcePageError(raw: String): String = if (isRawJobStatus(raw.trim())) "" else raw
+
+    /**
+     * Sentence shown on the wait page after a failed job.
+     * Uses failure_message when the job has one. Never the status enum.
+     */
+    fun waitFailureMessage(status: String, failureMessage: String?): String {
+        val message = failureMessage?.trim().orEmpty()
+        if (message.isNotEmpty() && !isRawJobStatus(message)) return message
+        return when (status) {
+            JOB_FAILED_RETRYABLE -> WAIT_FAIL_RETRYABLE
+            JOB_FAILED_TERMINAL -> WAIT_FAIL_TERMINAL
+            else -> ""
+        }
     }
 
     fun waitMeterFraction(): Float = WAIT_METER_HOLD_DP.toFloat() / WAIT_TRACK_DP.toFloat()

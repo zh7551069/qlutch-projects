@@ -182,6 +182,101 @@ class FlowLogicTest {
     }
 
     @Test
+    fun waitFailureStaysOnTheWaitPageAndHidesRawStatus() {
+        assertFalse(FlowLogic.waitFailed(FlowLogic.JOB_ACCEPTED))
+        assertFalse(FlowLogic.waitFailed(FlowLogic.JOB_RUNNING))
+        assertFalse(FlowLogic.waitFailed(FlowLogic.JOB_MAP_READY))
+        assertTrue(FlowLogic.waitFailed(FlowLogic.JOB_FAILED_RETRYABLE))
+        assertTrue(FlowLogic.waitFailed(FlowLogic.JOB_FAILED_TERMINAL))
+        assertFalse(FlowLogic.waitReleasesHome(FlowLogic.JOB_FAILED_RETRYABLE))
+        assertFalse(FlowLogic.waitReleasesHome(FlowLogic.JOB_FAILED_TERMINAL))
+        assertTrue(FlowLogic.waitAllowsRetry(FlowLogic.JOB_FAILED_RETRYABLE, true))
+        assertFalse(FlowLogic.waitAllowsRetry(FlowLogic.JOB_FAILED_TERMINAL, true))
+
+        assertEquals(
+            "地图暂时没有生成，可以用同一份材料再试一次",
+            FlowLogic.waitFailureMessage(FlowLogic.JOB_FAILED_RETRYABLE, null),
+        )
+        assertEquals(
+            "这份材料已经无法读取，请重新上传",
+            FlowLogic.waitFailureMessage(FlowLogic.JOB_FAILED_TERMINAL, "  "),
+        )
+        assertEquals(
+            "地图暂时没有生成，可以用同一份材料再试一次",
+            FlowLogic.waitFailureMessage(FlowLogic.JOB_FAILED_RETRYABLE, "failed_retryable"),
+        )
+        assertEquals("服务暂时不可用", FlowLogic.waitFailureMessage(FlowLogic.JOB_FAILED_TERMINAL, "服务暂时不可用"))
+        assertEquals("", FlowLogic.waitFailureMessage(FlowLogic.JOB_RUNNING, null))
+        assertFalse(FlowLogic.WAIT_FAIL_TITLE == FlowLogic.WAIT_TITLE)
+        assertEquals("", FlowLogic.sourcePageError("failed_retryable"))
+        assertEquals("", FlowLogic.sourcePageError(" failed_terminal "))
+        assertEquals("", FlowLogic.sourcePageError("map_ready"))
+        assertEquals("VALIDATION_MATERIAL_NOT_UPLOADED", FlowLogic.sourcePageError("VALIDATION_MATERIAL_NOT_UPLOADED"))
+
+        val activity = repoFile("apps/android/app/src/main/java/dev/qlutch/app/flow/FlowActivity.kt").readText()
+        val wait = activity.substringAfter("private fun WaitScreen(").substringBefore("private fun ReadingGif(")
+        assertTrue(wait.contains("FlowLogic.WAIT_FAIL_TITLE"))
+        assertTrue(wait.contains("failure_message"))
+        assertTrue(wait.contains("if (failed)"))
+        assertTrue(wait.contains("if (retryable)"))
+        assertTrue(wait.contains("再试一次"))
+        assertFalse(wait.contains("failure_code"))
+        assertFalse(wait.contains("JOB_FAILED_RETRYABLE"))
+        val paste = activity.substringAfter("private fun PasteScreen(").substringBefore("private fun WaitScreen(")
+        val more = activity.substringAfter("private fun MoreScreen(").substringBefore("private fun PasteScreen(")
+        assertTrue(paste.contains("FlowLogic.sourcePageError"))
+        assertTrue(more.contains("FlowLogic.sourcePageError"))
+        val retry = activity.substringAfter("fun retryImport()").substringBefore("fun skipFirstPack()")
+        assertTrue(retry.contains("FlowLogic.newIdempotencyKey()"))
+        assertTrue(retry.contains("packId, materialId"))
+        assertFalse(retry.contains("createUploadUrl"))
+        val overlay = activity.substringAfter("overlay = {").substringBefore("when (place.route)")
+        assertTrue(overlay.contains("ClosedToast(toast)"))
+        val auth = activity.substringAfter("FlowRoute.AUTH ->").substringBefore("FlowRoute.OTP ->")
+        assertTrue(auth.contains("onClosed = { toast = true }"))
+
+        val ios = repoFile("apps/ios/Qlutch/Flow/FlowView.swift").readText()
+        val iosLogic = repoFile("apps/ios/Qlutch/Flow/FlowLogic.swift").readText()
+        val iosControls = repoFile("apps/ios/Qlutch/UI/Controls.swift").readText()
+        assertTrue(iosLogic.contains("func waitFailureMessage"))
+        assertTrue(iosLogic.contains("func sourcePageError"))
+        assertTrue(ios.contains("OtpCaptureField"))
+        assertTrue(ios.contains("otpFocused = true"))
+        assertTrue(ios.contains("FlowLogic.waitFailTitle"))
+        assertTrue(ios.contains("FlowLogic.sourcePageError"))
+        assertTrue(ios.contains("ClosedToast(visible: true)"))
+        assertTrue(ios.contains("使用微信登录"))
+        assertTrue(ios.contains("使用支付宝登录"))
+        assertFalse(ios.substringAfter("private var wait:").substringBefore("private var regionSheet:").contains("failure_code"))
+        val iosRetry = ios.substringAfter("private func retryImport()").substringBefore("private func callError")
+        assertTrue(iosRetry.contains("FlowLogic.newIdempotencyKey()"))
+        assertTrue(iosRetry.contains("packId: packId, materialId: materialId"))
+        assertFalse(iosRetry.contains("createUploadURL"))
+        assertTrue(iosControls.contains("becomeFirstResponder()"))
+        assertTrue(iosControls.contains("keyboardType = .numberPad"))
+        assertFalse(ios.contains(".frame(width: 1, height: 1)"))
+
+        val harmony = repoFile("apps/harmony/entry/src/main/ets/flow/FlowHost.ets").readText()
+        val harmonyLogic = repoFile("apps/harmony/entry/src/main/ets/flow/FlowLogic.ets").readText()
+        assertTrue(harmonyLogic.contains("static waitFailureMessage"))
+        assertTrue(harmonyLogic.contains("static sourcePageError"))
+        assertTrue(harmony.contains("FlowLogic.waitFailTitle"))
+        assertTrue(harmony.contains("FlowLogic.sourcePageError"))
+        assertTrue(harmony.contains("failure_message"))
+        assertTrue(harmony.contains("ClosedToast({ visible: true })"))
+        assertTrue(harmony.contains("使用微信登录"))
+        assertTrue(harmony.contains("使用支付宝登录"))
+        val harmonyWait = harmony.substringAfter("waitPage()").substringBefore("top(stepIndex: number)")
+        assertFalse(harmonyWait.contains("failure_code"))
+        assertTrue(harmonyWait.contains("this.waitFailed"))
+        assertTrue(harmonyWait.contains("再试一次"))
+        val harmonyRetry = harmony.substringAfter("private retryImport()").substringBefore("private pickFile()")
+        assertTrue(harmonyRetry.contains("FlowLogic.newIdempotencyKey()"))
+        assertTrue(harmonyRetry.contains("this.packId, this.materialId"))
+        assertFalse(harmonyRetry.contains("createUploadUrl"))
+    }
+
+    @Test
     fun authSheetsOverlayThePageAndOnlyTouchLocalChoice() {
         val source = repoFile("apps/android/app/src/main/java/dev/qlutch/app/flow/FlowActivity.kt").readText()
         val overlay = source.substringAfter("overlay = {").substringBefore("when (place.route)")

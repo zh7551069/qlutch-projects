@@ -39,6 +39,9 @@ struct FlowView: View {
     @State private var materialId = ""
     @State private var showCamera = false
     @State private var waitRetryable = false
+    @State private var waitFailed = false
+    @State private var waitMessage = ""
+    @State private var otpFocused = false
     @State private var showImporter = false
     @StateObject private var location = LocationAsk()
 
@@ -59,6 +62,13 @@ struct FlowView: View {
             }
             .frame(maxWidth: 390)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            if toast {
+                VStack {
+                    Spacer()
+                    ClosedToast(visible: true).padding(.bottom, 75)
+                }
+                .allowsHitTesting(false)
+            }
             if sheet == "region" { regionSheet }
             if sheet == "language" { languageSheet }
         }
@@ -157,11 +167,12 @@ struct FlowView: View {
             VStack(spacing: 20) {
                 Text("✈").font(.system(size: 36)).foregroundStyle(QlutchTone.brand).frame(width: 80, height: 80)
                 Text("查看你的短信").font(qlutchFont("NotoSansSC-ExtraBold", 32))
-                OtpCells(code: code)
-                TextField("", text: Binding(get: { code }, set: { code = String(FlowLogic.phoneDigits($0).prefix(6)) }))
-                    .keyboardType(.numberPad)
-                    .frame(width: 1, height: 1)
-                    .opacity(0.01)
+                ZStack {
+                    OtpCells(code: code)
+                    OtpCaptureField(code: $code, focused: otpFocused)
+                        .frame(width: 328, height: 56)
+                }
+                .frame(width: 328, height: 56)
                 Text(FlowLogic.sentToLine(hint: hint, region: region, digits: phone))
                     .font(qlutchFont("NotoSansSC-Regular", 14)).foregroundStyle(QlutchTone.slate)
                 Text("请查看短信").font(qlutchFont("NotoSansSC-SemiBold", 14))
@@ -175,6 +186,8 @@ struct FlowView: View {
             }
             .padding(.horizontal, 16).padding(.bottom, 28)
         }
+        .onAppear { otpFocused = true }
+        .onDisappear { otpFocused = false }
     }
 
     private var noAccount: some View {
@@ -353,8 +366,7 @@ struct FlowView: View {
     }
 
     private var more: some View {
-        ZStack(alignment: .bottom) {
-            VStack(spacing: 0) {
+        VStack(spacing: 0) {
                 FlowTopBar(step: 7, onBack: back)
                 PromptRow(title: "用其他方式导入", subtitle: "把教材或课件交进来")
                 VStack(spacing: 16) {
@@ -376,16 +388,15 @@ struct FlowView: View {
                 }
                 .padding(.top, 24)
                 Spacer()
-                if !error.isEmpty {
-                    Text(error)
+                let shown = FlowLogic.sourcePageError(error)
+                if !shown.isEmpty {
+                    Text(shown)
                         .font(qlutchFont("NotoSansSC-Regular", 13))
                         .foregroundStyle(QlutchTone.footer)
                         .padding(.horizontal, 16)
                 }
                 SecondaryButton(label: "我没有材料", enabled: !busy, action: skipNoMaterial)
                     .padding(.horizontal, 16).padding(.bottom, 34)
-            }
-            ClosedToast(visible: toast).padding(.bottom, 75)
         }
     }
 
@@ -404,8 +415,9 @@ struct FlowView: View {
                 .padding(.horizontal, 16)
                 .padding(.top, 24)
             Spacer()
-            if !error.isEmpty {
-                Text(error)
+            let shown = FlowLogic.sourcePageError(error)
+            if !shown.isEmpty {
+                Text(shown)
                     .font(qlutchFont("NotoSansSC-Regular", 13))
                     .foregroundStyle(QlutchTone.footer)
             }
@@ -417,39 +429,52 @@ struct FlowView: View {
     }
 
     private var wait: some View {
-        VStack(spacing: 0) {
+        let shown = FlowLogic.sourcePageError(error)
+        return VStack(spacing: 0) {
             FlowTopBar(step: 7, onBack: back)
-            PromptRow(title: FlowLogic.waitTitle, subtitle: FlowLogic.waitCaption)
-            Spacer()
-            ReadingStage()
-                .id(waitEntry)
-            Text(FlowLogic.waitFootnote)
-                .font(qlutchFont("NotoSansSC-SemiBold", 16))
-                .foregroundStyle(QlutchTone.slate)
-                .multilineTextAlignment(.center)
-                .frame(width: 358)
-                .padding(.top, 20)
-            Capsule()
-                .fill(QlutchTone.line)
-                .frame(width: 248, height: 8)
-                .overlay(alignment: .leading) {
-                    Capsule()
-                        .fill(LinearGradient(colors: [QlutchTone.brand, Color(red: 210 / 255, green: 68 / 255, blue: 238 / 255)], startPoint: .leading, endPoint: .trailing))
-                        .frame(width: 248 * FlowLogic.waitMeterFraction(), height: 8)
+            if waitFailed {
+                PromptRow(title: FlowLogic.waitFailTitle, subtitle: waitMessage)
+                Spacer()
+                if !shown.isEmpty {
+                    Text(shown)
+                        .font(qlutchFont("NotoSansSC-Regular", 13))
+                        .foregroundStyle(QlutchTone.footer)
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 12)
                 }
-                .padding(.top, 20)
-            if !error.isEmpty {
-                Text(error)
-                    .font(qlutchFont("NotoSansSC-Regular", 13))
-                    .foregroundStyle(QlutchTone.footer)
-                    .padding(.top, 12)
+                if waitRetryable {
+                    SecondaryButton(label: "再试一次", enabled: !busy, action: retryImport)
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 34)
+                }
+            } else {
+                PromptRow(title: FlowLogic.waitTitle, subtitle: FlowLogic.waitCaption)
+                Spacer()
+                ReadingStage()
+                    .id(waitEntry)
+                Text(FlowLogic.waitFootnote)
+                    .font(qlutchFont("NotoSansSC-SemiBold", 16))
+                    .foregroundStyle(QlutchTone.slate)
+                    .multilineTextAlignment(.center)
+                    .frame(width: 358)
+                    .padding(.top, 20)
+                Capsule()
+                    .fill(QlutchTone.line)
+                    .frame(width: 248, height: 8)
+                    .overlay(alignment: .leading) {
+                        Capsule()
+                            .fill(LinearGradient(colors: [QlutchTone.brand, Color(red: 210 / 255, green: 68 / 255, blue: 238 / 255)], startPoint: .leading, endPoint: .trailing))
+                            .frame(width: 248 * FlowLogic.waitMeterFraction(), height: 8)
+                    }
+                    .padding(.top, 20)
+                if !shown.isEmpty {
+                    Text(shown)
+                        .font(qlutchFont("NotoSansSC-Regular", 13))
+                        .foregroundStyle(QlutchTone.footer)
+                        .padding(.top, 12)
+                }
+                Spacer()
             }
-            if waitRetryable {
-                SecondaryButton(label: "再试一次", enabled: !busy, action: retryImport)
-                    .padding(.horizontal, 16)
-                    .padding(.top, 12)
-            }
-            Spacer()
         }
         .onAppear {
             waitStart = Date()
@@ -459,26 +484,34 @@ struct FlowView: View {
             waitStart = nil
             releasedHome = false
             waitRetryable = false
+            waitFailed = false
+            waitMessage = ""
         }
         .task(id: waitEntry) {
             guard !jobId.isEmpty else { return }
             while !Task.isCancelled {
                 let outcome = await api.getJob(bearer: bearer, jobId: jobId)
                 if Task.isCancelled { return }
+                guard case .wait = route else { return }
                 switch outcome {
                 case .ok(let job):
-                    waitRetryable = FlowLogic.waitAllowsRetry(job.status, retryable: job.retryable)
                     if FlowLogic.waitReleasesHome(job.status) {
                         onHome()
                         return
                     }
-                    if job.status == FlowLogic.jobFailedRetryable || job.status == FlowLogic.jobFailedTerminal {
-                        error = (job.failure_code?.isEmpty == false) ? job.failure_code! : job.status
+                    if FlowLogic.waitFailed(job.status) {
+                        waitFailed = true
+                        waitRetryable = FlowLogic.waitAllowsRetry(job.status, retryable: job.retryable)
+                        waitMessage = FlowLogic.waitFailureMessage(job.status, failureMessage: job.failure_message)
+                        error = FlowLogic.sourcePageError(error)
                         return
                     }
+                    waitFailed = false
+                    waitRetryable = false
+                    waitMessage = ""
                     error = ""
                 case .err(_, let code):
-                    error = code
+                    error = FlowLogic.sourcePageError(code)
                 case .transport(let reason):
                     error = reason
                 }
@@ -569,6 +602,8 @@ struct FlowView: View {
         waitStart = nil
         releasedHome = false
         waitRetryable = false
+        waitFailed = false
+        waitMessage = ""
         jobId = ""
         packId = ""
         materialId = ""
@@ -592,7 +627,10 @@ struct FlowView: View {
 
     private func back() {
         toast = false
-        if case .wait = route { resetWaitSession() }
+        if case .wait = route {
+            resetWaitSession()
+            error = ""
+        }
         if stack.isEmpty { onLeave() } else {
             route = stack.removeLast()
         }
@@ -725,6 +763,8 @@ struct FlowView: View {
                     packId = created.pack_id
                     materialId = created.material_id
                     waitRetryable = false
+                    waitFailed = false
+                    waitMessage = ""
                     error = ""
                     waitEntry += 1
                 } else {
