@@ -12,13 +12,30 @@ func TestProductionWorkerDoesNotShortcutMapReady(t *testing.T) {
 		t.Fatal(err)
 	}
 	text := string(body)
-	if !strings.Contains(text, "airuntime.New()") || !strings.Contains(text, "importworker.Open") {
-		t.Fatal("worker main does not use the airuntime entry")
+	newAt := strings.Index(text, "airuntime.New()")
+	installAt := strings.Index(text, "airuntime.InstallFromEnv(")
+	openAt := strings.Index(text, "importworker.Open")
+	if newAt < 0 || installAt < newAt || openAt < installAt {
+		t.Fatal("worker main does not install through the airuntime entry")
 	}
 	for _, banned := range []string{"SetProvider", "TestingSetJobStatus", "map_ready", "QLUTCH_FAKE", "openai", "sk-"} {
 		if strings.Contains(text, banned) {
 			t.Fatalf("worker main contains %s", banned)
 		}
+	}
+}
+
+func TestImportWorkerDoesNotInstallProvider(t *testing.T) {
+	body, err := os.ReadFile("../api/importworker/importworker.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(body)
+	if strings.Contains(text, "SetProvider") || strings.Contains(text, "InstallFromEnv") {
+		t.Fatal("importworker installs a provider")
+	}
+	if !strings.Contains(text, "SetRecorder") {
+		t.Fatal("importworker no longer installs the usage ledger")
 	}
 }
 

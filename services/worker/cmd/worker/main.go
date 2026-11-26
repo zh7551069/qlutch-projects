@@ -27,6 +27,7 @@ func main() {
 	defer stop()
 
 	runtime := airuntime.New()
+	airuntime.InstallFromEnv(runtime)
 	log.Info("ai runtime", "status", runtime.Status())
 	processor, err := importworker.Open(ctx, importworker.Config{
 		DatabaseURL: cfg.DatabaseURL,
