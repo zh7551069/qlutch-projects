@@ -4,7 +4,7 @@ plugins {
 }
 
 val e1Api = providers.gradleProperty("qlutch.e1.api").orNull == "true"
-val apiBaseUrl = if (e1Api) "http://47.93.180.37" else "http://10.0.2.2:4710"
+val apiBaseUrl = if (e1Api) "https://qlutch.strict-rabbit.com" else "http://10.0.2.2:4710"
 
 androidComponents {
     // AGP 9 registers Compose Preview tasks for every variant. Release unit tests
