@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.requiredHeight
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
@@ -27,7 +28,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -40,7 +44,9 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.PlatformTextStyle
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -49,6 +55,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.qlutch.app.R
+import dev.qlutch.app.flow.FlowLogic
 import dev.qlutch.app.welcome.WelcomeType
 
 internal object QlutchTone {
@@ -429,7 +436,7 @@ internal fun ClosedChannel(label: String, mark: @Composable () -> Unit, onClosed
         modifier = Modifier
             .widthIn(max = 358.dp)
             .fillMaxWidth()
-            .height(50.dp)
+            .requiredHeight(50.dp)
             .clip(RoundedCornerShape(25.dp))
             .background(QlutchTone.white)
             .border(1.dp, QlutchTone.line, RoundedCornerShape(25.dp))
@@ -488,6 +495,19 @@ internal fun PhoneField(
     onRegion: () -> Unit,
     onNumber: (String) -> Unit,
 ) {
+    val digits = FlowLogic.phoneDigits(number)
+    val formatted = FlowLogic.formatPhone(region, digits)
+    var field by remember {
+        mutableStateOf(TextFieldValue(formatted, TextRange(formatted.length)))
+    }
+    if (field.text != formatted) {
+        val caretDigits = if (FlowLogic.phoneDigits(field.text) == digits) {
+            FlowLogic.digitsBeforeCursor(field.text, field.selection.end)
+        } else {
+            digits.length
+        }
+        field = TextFieldValue(formatted, TextRange(FlowLogic.phoneCursor(formatted, caretDigits)))
+    }
     val shape = RoundedCornerShape(25.dp)
     Row(
         modifier = Modifier
@@ -516,15 +536,23 @@ internal fun PhoneField(
         }
         Box(Modifier.size(width = 1.dp, height = 20.dp).background(QlutchTone.line))
         BasicTextField(
-            value = number,
-            onValueChange = onNumber,
+            value = field,
+            onValueChange = { proposed ->
+                if (proposed.text == field.text) {
+                    field = proposed
+                } else {
+                    val edit = FlowLogic.editPhoneField(region, proposed.text, proposed.selection.end)
+                    field = TextFieldValue(edit.text, TextRange(edit.cursor))
+                    if (edit.digits != digits) onNumber(edit.digits)
+                }
+            },
             textStyle = qlutchText(16, QlutchTone.ink, regular, FontWeight.Normal, TextAlign.Start),
             cursorBrush = SolidColor(QlutchTone.ink),
             singleLine = true,
             modifier = Modifier.weight(1f),
             decorationBox = { inner ->
                 Box {
-                    if (number.isEmpty()) {
+                    if (digits.isEmpty()) {
                         Text("138 0013 8000", style = qlutchText(16, QlutchTone.ink, regular, FontWeight.Normal, TextAlign.Start))
                     }
                     inner()

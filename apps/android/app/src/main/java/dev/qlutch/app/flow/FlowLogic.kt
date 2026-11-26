@@ -116,10 +116,63 @@ internal object FlowLogic {
     fun phoneDigits(raw: String): String = raw.filter { it in '0'..'9' }
 
     fun formatPhone(region: String, digits: String): String {
-        if (region == REGION_MAINLAND && digits.length == 11) {
-            return digits.substring(0, 3) + " " + digits.substring(3, 7) + " " + digits.substring(7)
+        val body = phoneDigits(digits)
+        if (region == REGION_MAINLAND) {
+            return formatMainlandPhone(body)
         }
-        return digits.chunked(4).joinToString(" ")
+        return body.chunked(4).joinToString(" ")
+    }
+
+    /** +86 stays 3-4-4 for the whole entry, matching the 138 0013 8000 placeholder. */
+    private fun formatMainlandPhone(digits: String): String {
+        if (digits.length <= 3) return digits
+        if (digits.length <= 7) return digits.substring(0, 3) + " " + digits.substring(3)
+        return digits.substring(0, 3) + " " + digits.substring(3, 7) + " " + digits.substring(7)
+    }
+
+    fun digitsBeforeCursor(text: String, cursor: Int): Int {
+        val end = cursor.coerceIn(0, text.length)
+        var count = 0
+        for (index in 0 until end) {
+            if (text[index] in '0'..'9') count += 1
+        }
+        return count
+    }
+
+    /** Offset in [formatted] sitting just after [digitCount] digits. The full count lands after the last digit. */
+    fun phoneCursor(formatted: String, digitCount: Int): Int {
+        if (digitCount <= 0) return 0
+        var seen = 0
+        for (index in formatted.indices) {
+            if (formatted[index] in '0'..'9') {
+                seen += 1
+                if (seen == digitCount) return index + 1
+            }
+        }
+        return formatted.length
+    }
+
+    fun editPhoneField(region: String, proposedText: String, proposedCursor: Int): PhoneFieldEdit {
+        val digits = phoneDigits(proposedText)
+        val text = formatPhone(region, digits)
+        val cursor = phoneCursor(text, digitsBeforeCursor(proposedText, proposedCursor))
+        return PhoneFieldEdit(digits, text, cursor)
+    }
+
+    /** Caret in [after] after one contiguous insert, delete, or replace of [before]. */
+    fun cursorAfterReplacement(before: String, after: String): Int {
+        var prefix = 0
+        val shared = minOf(before.length, after.length)
+        while (prefix < shared && before[prefix] == after[prefix]) prefix += 1
+        var suffix = 0
+        while (
+            suffix < before.length - prefix &&
+            suffix < after.length - prefix &&
+            before[before.length - 1 - suffix] == after[after.length - 1 - suffix]
+        ) {
+            suffix += 1
+        }
+        return after.length - suffix
     }
 
     fun otpContinueEnabled(code: String): Boolean = code.length == 6 && code.all { it in '0'..'9' }
@@ -196,6 +249,12 @@ internal object FlowLogic {
         return "验证码已发送至 $target"
     }
 }
+
+internal data class PhoneFieldEdit(
+    val digits: String,
+    val text: String,
+    val cursor: Int,
+)
 
 internal data class RegionChoice(val name: String, val code: String)
 

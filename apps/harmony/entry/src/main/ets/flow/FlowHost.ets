@@ -50,6 +50,9 @@ export struct FlowHost {
   @State materialId: string = ''
   @State waitRetryable: boolean = false
   private pollTimer: number = -1
+  private phoneController: TextInputController = new TextInputController()
+  private phoneCaretPending: number = -1
+  private phoneCaretToken: number = 0
   private stack: string[] = []
   private stepsStack: number[] = []
   private api: IdentityApi = new IdentityApi(API_BASE_URL)
@@ -65,6 +68,37 @@ export struct FlowHost {
   aboutToDisappear(): void {
     NavBus.back = () => false
     this.resetWaitSession()
+  }
+
+  private onPhoneInput(value: string): void {
+    const before = FlowLogic.formatPhone(this.region, this.phone)
+    if (value === before) {
+      this.placePhoneCaret()
+      return
+    }
+    const proposedCursor = FlowLogic.cursorAfterReplacement(before, value)
+    const edit = FlowLogic.editPhoneField(this.region, value, proposedCursor)
+    this.phoneCaretPending = edit.cursor
+    this.phone = edit.digits
+    this.placePhoneCaret()
+  }
+
+  private placePhoneCaret(): void {
+    if (this.phoneCaretPending < 0) {
+      return
+    }
+    const caret = this.phoneCaretPending
+    this.phoneCaretToken += 1
+    const token = this.phoneCaretToken
+    setTimeout(() => {
+      if (token !== this.phoneCaretToken) {
+        return
+      }
+      this.phoneController.caretPosition(caret)
+      if (this.phoneCaretPending === caret) {
+        this.phoneCaretPending = -1
+      }
+    }, 0)
   }
 
   build() {
@@ -116,7 +150,8 @@ export struct FlowHost {
 
   @Builder
   auth() {
-    Column() {
+    Scroll() {
+      Column() {
       Column() {
         Image($rawfile('wordmark_small.png'))
           .width(111)
@@ -168,12 +203,16 @@ export struct FlowHost {
             .fontSize(16)
             .fontFamily('NotoSansSC-SemiBold')
             .onClick(() => { this.sheet = 'region' })
-          TextInput({ text: FlowLogic.formatPhone(this.region, this.phone), placeholder: '138 0013 8000' })
+          TextInput({
+            text: FlowLogic.formatPhone(this.region, this.phone),
+            placeholder: '138 0013 8000',
+            controller: this.phoneController
+          })
             .layoutWeight(1)
             .type(InputType.Number)
             .backgroundColor('#00000000')
             .onChange((value: string) => {
-              this.phone = FlowLogic.phoneDigits(value)
+              this.onPhoneInput(value)
             })
         }
         .width('100%')
@@ -194,7 +233,6 @@ export struct FlowHost {
         }
       }
       .padding({ left: 16, right: 16 })
-      Blank().layoutWeight(1)
       Column({ space: 12 }) {
         Text('其他方式').fontSize(13).fontColor('#64748B')
         ClosedChannel({ label: '使用微信登录', mark: '微', onTap: () => { this.showToast() } })
@@ -209,9 +247,15 @@ export struct FlowHost {
           .onClick(() => { this.sheet = 'language' })
       }
       .padding({ left: 16, right: 16, bottom: 28 })
+      }
+      .width('100%')
+      .constraintSize({ minHeight: '100%' })
+      .justifyContent(FlexAlign.SpaceBetween)
     }
     .width('100%')
     .height('100%')
+    .scrollBar(BarState.Off)
+    .align(Alignment.Top)
   }
 
   @Builder
