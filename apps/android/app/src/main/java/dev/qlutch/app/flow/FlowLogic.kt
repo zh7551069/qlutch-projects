@@ -1,6 +1,7 @@
 package dev.qlutch.app.flow
 
 import java.util.UUID
+import kotlin.math.roundToInt
 
 /**
  * Navigation and copy for the new-user flow. Option keys are the Bridge frame
@@ -134,7 +135,7 @@ internal object FlowLogic {
 
     fun progressFillDp(stepIndex: Int, trackDp: Int = PROGRESS_TRACK_DP): Int {
         val clamped = stepIndex.coerceIn(0, 7)
-        return kotlin.math.round(trackDp * clamped / 7f)
+        return (trackDp * clamped / 7f).roundToInt()
     }
 
     /** Home opens only when the job status is map_ready. Elapsed time is not that signal. */

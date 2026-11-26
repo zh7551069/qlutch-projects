@@ -165,6 +165,13 @@ private fun NewUserFlow(
         toast = false
     }
 
+    fun resetWaitSession() {
+        jobId = ""
+        packId = ""
+        materialId = ""
+        waitGeneration += 1
+    }
+
     fun back() {
         toast = false
         if (place.route == FlowRoute.WAIT) resetWaitSession()
@@ -180,11 +187,14 @@ private fun NewUserFlow(
         onHome()
     }
 
-    fun resetWaitSession() {
-        jobId = ""
-        packId = ""
-        materialId = ""
-        waitGeneration += 1
+    fun afterSession(nextStep: String) {
+        val next = FlowLogic.placeAfterSession(nextStep, permissionsSeen)
+        if (next.route == FlowRoute.HOME) {
+            openHome()
+        } else {
+            backStack = emptyList()
+            go(next)
+        }
     }
 
     fun openWait(source: FlowRoute, job: dev.qlutch.contract.KnowledgeJob) {
@@ -237,6 +247,28 @@ private fun NewUserFlow(
         }.start()
     }
 
+    fun applySkip(nextStep: String) {
+        if (nextStep == FlowLogic.NEXT_ONBOARDING) {
+            Thread {
+                val state = api.onboarding(bearer)
+                runOnUi {
+                    busy = false
+                    when (state) {
+                        is ApiOutcome.Ok -> {
+                            backStack = emptyList()
+                            go(FlowLogic.placeForOnboarding(state.value.current_step_id))
+                        }
+                        is ApiOutcome.Err -> error = state.code
+                        is ApiOutcome.Transport -> error = state.reason
+                    }
+                }
+            }.start()
+            return
+        }
+        busy = false
+        afterSession(nextStep)
+    }
+
     fun retryImport() {
         if (busy || packId.isEmpty() || materialId.isEmpty()) return
         busy = true
@@ -280,38 +312,6 @@ private fun NewUserFlow(
                 }
             }
         }.start()
-    }
-
-    fun applySkip(nextStep: String) {
-        if (nextStep == FlowLogic.NEXT_ONBOARDING) {
-            Thread {
-                val state = api.onboarding(bearer)
-                runOnUi {
-                    busy = false
-                    when (state) {
-                        is ApiOutcome.Ok -> {
-                            backStack = emptyList()
-                            go(FlowLogic.placeForOnboarding(state.value.current_step_id))
-                        }
-                        is ApiOutcome.Err -> error = state.code
-                        is ApiOutcome.Transport -> error = state.reason
-                    }
-                }
-            }.start()
-            return
-        }
-        busy = false
-        afterSession(nextStep)
-    }
-
-    fun afterSession(nextStep: String) {
-        val next = FlowLogic.placeAfterSession(nextStep, permissionsSeen)
-        if (next.route == FlowRoute.HOME) {
-            openHome()
-        } else {
-            backStack = emptyList()
-            go(next)
-        }
     }
 
     LaunchedEffect(toast) {
