@@ -19,7 +19,7 @@ Qlutch 的单仓空骨架。这里有三端壳、后管壳、API、作业进程�
 
 作业进程不监听端口。`healthz` 只表示 API 进程还活着。`readyz` 才检查数据库、Redis 和对象存储是否可达。
 
-Android 模拟器访问宿主机时用 `http://10.0.2.2:4710`，默认构建就是这个地址。iOS 模拟器和鸿蒙默认产品用 `http://127.0.0.1:4710`。E1 联调另选 Android 参数 `-Pqlutch.e1.api=true`、iOS scheme `Qlutch-E1`、鸿蒙 product `e1`，根地址是 `http://47.93.180.37`（HTTP 80）。
+Android 模拟器访问宿主机时用 `http://10.0.2.2:4710`，默认构建就是这个地址。iOS 模拟器和鸿蒙默认产品用 `http://127.0.0.1:4710`。E1 联调另选 Android 参数 `-Pqlutch.e1.api=true`、iOS scheme `Qlutch-E1`、鸿蒙 product `e1`，根地址是 `https://qlutch.strict-rabbit.com`（只用 HTTPS，不要用 HTTP）。
 
 ## 启动
 

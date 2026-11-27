@@ -27,7 +27,7 @@
         "buildOption": {
           "arkOptions": {
             "buildProfileFields": {
-              "API_BASE_URL": "http://47.93.180.37"
+              "API_BASE_URL": "https://qlutch.strict-rabbit.com"
             }
           }
         }
